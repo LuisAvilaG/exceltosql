@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import type { DragEvent } from 'react';
 import {
   Card,
@@ -58,36 +58,35 @@ export function Step1Upload({ onFileLoaded }: Step1UploadProps) {
     e.stopPropagation();
   };
 
+  const processFile = (file: File) => {
+    if (
+      file.type ===
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      file.name.endsWith('.xlsx')
+    ) {
+      setFile(file);
+      // Simulate file parsing
+      setPreviewData(mockExcelData.slice(0, 50));
+      setHeaders(mockExcelHeaders);
+    } else {
+      alert('Please upload an Excel file (.xlsx).');
+    }
+  }
+
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const droppedFile = e.dataTransfer.files[0];
-      if (
-        droppedFile.type ===
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-        droppedFile.name.endsWith('.xlsx')
-      ) {
-        setFile(droppedFile);
-        // Simulate file parsing
-        setPreviewData(mockExcelData.slice(0, 50));
-        setHeaders(mockExcelHeaders);
-      } else {
-        alert('Please upload an Excel file (.xlsx).');
-      }
+      processFile(e.dataTransfer.files[0]);
       e.dataTransfer.clearData();
     }
   };
   
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-        const selectedFile = e.target.files[0];
-        setFile(selectedFile);
-        // Simulate file parsing
-        setPreviewData(mockExcelData.slice(0, 50));
-        setHeaders(mockExcelHeaders);
+        processFile(e.target.files[0]);
     }
   };
 
@@ -119,6 +118,7 @@ export function Step1Upload({ onFileLoaded }: Step1UploadProps) {
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
+            onClick={() => document.getElementById('file-upload-input')?.click()}
           >
             <UploadCloud className="w-12 h-12 text-muted-foreground" />
             <p className="mt-4 text-center text-muted-foreground">
@@ -126,7 +126,7 @@ export function Step1Upload({ onFileLoaded }: Step1UploadProps) {
               <span className="font-semibold text-primary">click to browse</span>
             </p>
             <p className="text-xs text-muted-foreground mt-1">Only .xlsx files</p>
-            <input type="file" accept=".xlsx" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleFileSelect} />
+            <input id="file-upload-input" type="file" accept=".xlsx" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleFileSelect} />
 
           </div>
         ) : (

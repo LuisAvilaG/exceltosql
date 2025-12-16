@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -34,7 +34,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { ArrowRight, ArrowLeft, Settings, Info } from 'lucide-react';
-import { tableColumns, type SqlColumn } from '@/lib/schema';
+import { tableColumns } from '@/lib/schema';
 import type { ColumnMapping, RunSettings } from '@/lib/types';
 import { Badge } from '../ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
@@ -52,16 +52,19 @@ export function Step2Mapping({
   onMappingComplete,
   onBack,
 }: Step2MappingProps) {
-  const [mapping, setMapping] = useState<ColumnMapping>(() => {
-    // Auto-map based on similar names
+  const [mapping, setMapping] = useState<ColumnMapping>({});
+
+  useEffect(() => {
+    // Auto-map based on similar names when component mounts or headers change
     const autoMapping: ColumnMapping = {};
     tableColumns.forEach(col => {
       if (col.isIdentity) return;
-      const similarHeader = excelHeaders.find(h => h.toLowerCase().replace(/ /g, '') === col.name.toLowerCase());
+      const similarHeader = excelHeaders.find(h => h.toLowerCase().replace(/[^a-z0-9]/gi, '') === col.name.toLowerCase().replace(/[^a-z0-9]/gi, ''));
       autoMapping[col.name] = similarHeader || null;
     });
-    return {...autoMapping, ...initialMapping};
-  });
+    // If there's an initial mapping, merge it, otherwise use the new automap
+    setMapping(Object.keys(initialMapping).length > 0 ? initialMapping : autoMapping);
+  }, [excelHeaders, initialMapping]);
   
   const handleMappingChange = (sqlColumn: string, excelColumn: string) => {
     setMapping((prev) => ({ ...prev, [sqlColumn]: excelColumn === 'none' ? null : excelColumn }));

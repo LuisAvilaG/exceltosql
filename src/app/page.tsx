@@ -25,6 +25,7 @@ export default function Home() {
     setExcelData(data);
     setExcelHeaders(headers);
     setFileName(name);
+    setColumnMapping({}); // Reset mapping when new file is loaded
     setStep(2);
   };
 
@@ -42,12 +43,13 @@ export default function Home() {
   };
 
   const handleNewJob = () => {
+    setStep(1);
+    // Reset all state for a new job
     setExcelData([]);
     setExcelHeaders([]);
     setFileName('');
     setColumnMapping({});
     setRunSettings(null);
-    setStep(1);
   };
 
   const renderStep = () => {

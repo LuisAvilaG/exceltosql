@@ -11,7 +11,7 @@ export const mockExcelData = [
 export const mockExcelHeaders = Object.keys(mockExcelData[0]);
 
 export const mockJobHistory = [
-    { id: '1', fileName: 'ventas_julio.xlsx', date: new Date('2024-07-19T10:30:00Z'), user: 'admin', strategy: 'Upsert', result: 'Completed with 5 errors', totalRows: 1000, inserted: 995, skipped: 0, errors: 5 },
-    { id: '2', fileName: 'ventas_junio_final.xlsx', date: new Date('2024-06-30T17:00:00Z'), user: 'admin', strategy: 'Insert only', result: 'Completed', totalRows: 5280, inserted: 5280, skipped: 0, errors: 0 },
-    { id: '3', fileName: 'ajuste_q2.xlsx', date: new Date('2024-06-15T11:00:00Z'), user: 'guest', strategy: 'Skip duplicates', result: 'Connection failed', totalRows: 250, inserted: 0, skipped: 0, errors: 250 },
+    { id: '1', fileName: 'sales_july.xlsx', date: new Date('2024-07-19T10:30:00Z'), user: 'admin', strategy: 'Upsert', result: 'Completed with 5 errors', totalRows: 1000, inserted: 995, skipped: 0, errors: 5 },
+    { id: '2', fileName: 'sales_june_final.xlsx', date: new Date('2024-06-30T17:00:00Z'), user: 'admin', strategy: 'Insert only', result: 'Completed', totalRows: 5280, inserted: 5280, skipped: 0, errors: 0 },
+    { id: '3', fileName: 'q2_adjustment.xlsx', date: new Date('2024-06-15T11:00:00Z'), user: 'guest', strategy: 'Skip duplicates', result: 'Connection failed', totalRows: 250, inserted: 0, skipped: 0, errors: 250 },
 ];
