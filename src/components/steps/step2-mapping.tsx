@@ -33,9 +33,9 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { ArrowRight, ArrowLeft, Settings, Info } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Settings, Info, PlusCircle, X } from 'lucide-react';
 import { tableColumns } from '@/lib/schema';
-import type { ColumnMapping, RunSettings } from '@/lib/types';
+import type { ColumnMapping, RunSettings, SqlColumn } from '@/lib/types';
 import { Badge } from '../ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 
@@ -53,25 +53,36 @@ export function Step2Mapping({
   onBack,
 }: Step2MappingProps) {
   const [mapping, setMapping] = useState<ColumnMapping>({});
+  
+  // Start with required columns and any from the initial mapping
+  const getInitialDestinationColumns = () => {
+    const required = tableColumns.filter(c => c.isRequired && !c.isIdentity);
+    const fromInitial = Object.keys(initialMapping)
+                                .map(key => tableColumns.find(c => c.name === key))
+                                .filter((c): c is SqlColumn => !!c && !c.isIdentity);
+    const combined = [...required, ...fromInitial];
+    // Remove duplicates
+    return Array.from(new Set(combined.map(c => c.name))).map(name => combined.find(c => c.name === name)!);
+  };
+
+  const [destinationColumns, setDestinationColumns] = useState<SqlColumn[]>(getInitialDestinationColumns);
 
   useEffect(() => {
-    // Auto-map based on similar names when component mounts or headers change
+    // Auto-map based on similar names
     const autoMapping: ColumnMapping = {};
-    tableColumns.forEach(col => {
-      if (col.isIdentity) return;
+    destinationColumns.forEach(col => {
       const similarHeader = excelHeaders.find(h => h.toLowerCase().replace(/[^a-z0-9]/gi, '') === col.name.toLowerCase().replace(/[^a-z0-9]/gi, ''));
       autoMapping[col.name] = similarHeader || null;
     });
-    // If there's an initial mapping, merge it, otherwise use the new automap
-    setMapping(Object.keys(initialMapping).length > 0 ? initialMapping : autoMapping);
-  }, [excelHeaders, initialMapping]);
+    // If there's an initial mapping, merge it
+    setMapping(prev => ({...autoMapping, ...prev, ...initialMapping}));
+  }, [excelHeaders, destinationColumns, initialMapping]);
   
   const handleMappingChange = (sqlColumn: string, excelColumn: string) => {
     setMapping((prev) => ({ ...prev, [sqlColumn]: excelColumn === 'none' ? null : excelColumn }));
   };
 
   const handleNext = () => {
-    // This is a placeholder for settings that would be configured here.
     const settings: RunSettings = {
       duplicateStrategy: 'insert_only',
       strictMode: true,
@@ -79,15 +90,35 @@ export function Step2Mapping({
     };
     onMappingComplete(mapping, settings);
   };
-  
-  const destinationColumns = tableColumns.filter((col) => !col.isIdentity);
+
+  const addColumn = (columnName: string) => {
+    const columnToAdd = tableColumns.find(c => c.name === columnName);
+    if (columnToAdd && !destinationColumns.find(c => c.name === columnName)) {
+      setDestinationColumns(prev => [...prev, columnToAdd]);
+    }
+  };
+
+  const removeColumn = (columnName: string) => {
+    const columnToRemove = tableColumns.find(c => c.name === columnName);
+    if(columnToRemove && columnToRemove.isRequired) return; // Cannot remove required columns
+    setDestinationColumns(prev => prev.filter(c => c.name !== columnName));
+    setMapping(prev => {
+        const newMapping = {...prev};
+        delete newMapping[columnName];
+        return newMapping;
+    });
+  };
+
+  const availableColumnsToAdd = tableColumns.filter(
+    (col) => !col.isIdentity && !destinationColumns.some((dc) => dc.name === col.name)
+  );
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Step 2: Column Mapping</CardTitle>
         <CardDescription>
-          Assign columns from your Excel file to the columns of the destination SQL table.
+          Assign columns from your Excel file to the columns of the destination SQL table. Add or remove optional SQL columns as needed.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -98,6 +129,7 @@ export function Step2Mapping({
                 <TableHead>SQL Column (Destination)</TableHead>
                 <TableHead>Excel Column (Source)</TableHead>
                 <TableHead className="text-center">Transformations</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -173,10 +205,33 @@ export function Step2Mapping({
                       </PopoverContent>
                     </Popover>
                   </TableCell>
+                  <TableCell className="text-right">
+                    {!col.isRequired && (
+                        <Button variant="ghost" size="icon" onClick={() => removeColumn(col.name)}>
+                            <X className="h-4 w-4 text-destructive" />
+                        </Button>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+        </div>
+        <div className="mt-4 flex items-center gap-2">
+            <Select onValueChange={addColumn} value="">
+                <SelectTrigger className="w-[250px]">
+                    <SelectValue placeholder="Add a destination column..." />
+                </SelectTrigger>
+                <SelectContent>
+                    {availableColumnsToAdd.map(col => (
+                        <SelectItem key={col.name} value={col.name}>{col.name}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            <Button variant="outline" onClick={() => addColumn((document.querySelector('[data-radix-collection-item]') as HTMLElement)?.dataset.value || '')} disabled={availableColumnsToAdd.length === 0}>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Add Column
+            </Button>
         </div>
       </CardContent>
       <CardFooter className="flex justify-between">

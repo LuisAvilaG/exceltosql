@@ -9,3 +9,11 @@ export type RunSettings = {
   strictMode: boolean;
   batchSize: number;
 };
+
+export type SqlColumn = {
+  name: string;
+  type: string;
+  isIdentity: boolean;
+  isRequired: boolean;
+  description: string;
+};
