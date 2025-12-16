@@ -1,0 +1,14 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: excel-sql-loader
+    ports:
+      - "3000:3000"
+    # The 'env_file' property reads variables from your .env.local file
+    # and passes them into the container as environment variables.
+    # This is how the application inside Docker gets its database credentials.
+    env_file:
+      - .env.local
+    restart: unless-stopped
