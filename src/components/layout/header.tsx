@@ -146,18 +146,34 @@ export function Header() {
       <Dialog open={isTestConnOpen} onOpenChange={setIsTestConnOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Test SQL Server Connection</DialogTitle>
+            <DialogTitle>SQL Server Connection</DialogTitle>
             <DialogDescription>
-              Check if the application can connect to the database with the
-              current configuration.
+              Configure the connection to your SQL Server database using environment variables.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <p className="text-sm text-muted-foreground">
-              Connection credentials are set via environment variables (e.g.
-              SQL_HOST, SQL_USER, etc.) and are not displayed here for
-              security.
-            </p>
+            <div className="prose prose-sm text-foreground">
+              <p>
+                To connect to your SQL Server, create a file named <code className="p-1 bg-muted rounded">.env.local</code> in the root of the project and add the following variables:
+              </p>
+              <pre className="p-4 bg-muted rounded text-sm">
+                <code>
+                  SQL_HOST=your_server_address
+                  <br />
+                  SQL_DATABASE=your_database_name
+                  <br />
+                  SQL_USER=your_username
+                  <br />
+                  SQL_PASSWORD=your_password
+                  <br />
+                  SQL_PORT=1433
+                </code>
+              </pre>
+              <p className="text-xs text-muted-foreground">
+                These credentials are used by the server and are not exposed to the client. Restart your application after creating the file.
+              </p>
+            </div>
+            
             {testStatus === 'success' && (
               <Alert variant="default" className="border-green-500">
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
@@ -172,8 +188,7 @@ export function Header() {
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Connection Error</AlertTitle>
                 <AlertDescription>
-                  Could not connect to the database. Check your environment
-                  variables and network connection.
+                  Could not connect to the database. Check your environment variables and network connection.
                 </AlertDescription>
               </Alert>
             )}
@@ -183,7 +198,7 @@ export function Header() {
               onClick={handleTestConnection}
               disabled={testStatus === 'testing'}
             >
-              {testStatus === 'testing' ? 'Testing...' : 'Run Test'}
+              {testStatus === 'testing' ? 'Testing...' : 'Test Connection'}
             </Button>
           </DialogFooter>
         </DialogContent>

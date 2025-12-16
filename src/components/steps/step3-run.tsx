@@ -10,9 +10,10 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, ArrowLeft, Play, RefreshCw, Download, Info } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Play, RefreshCw, Download, Info, Trash2 } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import {
   Table,
@@ -64,6 +65,8 @@ export function Step3Run({
   const [duplicateStrategy, setDuplicateStrategy] = useState('insert_only');
   const [strictMode, setStrictMode] = useState('tolerant');
   const [batchSize, setBatchSize] = useState('1000');
+  const [deleteAll, setDeleteAll] = useState(false);
+
 
   const processDataForImport = () => {
     const allSqlColumns = tableColumns.map(c => c.name);
@@ -73,15 +76,15 @@ export function Step3Run({
 
         allSqlColumns.forEach(sqlCol => {
             const mappedExcelCol = columnMapping[sqlCol];
+            const columnSchema = tableColumns.find(c => c.name === sqlCol);
 
-            if (mappedExcelCol && excelRow.hasOwnProperty(mappedExcelCol)) {
+            if (mappedExcelCol && excelRow.hasOwnProperty(mappedExcelCol) && excelRow[mappedExcelCol] !== null && excelRow[mappedExcelCol] !== '') {
                 transformedRow[sqlCol] = excelRow[mappedExcelCol];
             } else {
                 // Handle default values for unmapped columns
                 if (sqlCol === 'MeraAreaId') {
                     transformedRow[sqlCol] = null;
                 } else if (sqlCol !== 'Id') { // Don't default identity column
-                    const columnSchema = tableColumns.find(c => c.name === sqlCol);
                     if (columnSchema?.type.includes('decimal') || columnSchema?.type.includes('int')) {
                        transformedRow[sqlCol] = 0;
                     } else {
@@ -101,6 +104,9 @@ export function Step3Run({
 
     if (status === 'running') {
       const processedData = processDataForImport();
+      if (deleteAll) {
+        console.log("Simulating: Deleting all previous data from the table.");
+      }
       console.log('Simulating import with processed data:', processedData.slice(0, 5));
 
       startTime = Date.now();
@@ -137,7 +143,7 @@ export function Step3Run({
     }
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, excelData.length]);
+  }, [status, excelData.length, deleteAll]);
 
   const handleRun = (dryRun: boolean) => {
     setIsDryRun(dryRun);
@@ -256,6 +262,16 @@ export function Step3Run({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        <div className="space-y-4 p-4 border rounded-lg bg-destructive/10 border-destructive">
+            <h3 className="font-semibold flex items-center gap-2"><Trash2 className="h-4 w-4" />Pre-Import Actions</h3>
+            <div className="flex items-center space-x-2">
+                <Checkbox id="delete-all" checked={deleteAll} onCheckedChange={(checked) => setDeleteAll(!!checked)} />
+                <Label htmlFor="delete-all">Delete all existing data from the destination table before import.</Label>
+            </div>
+             <p className="text-xs text-muted-foreground">
+                Warning: This action is irreversible and will permanently delete all data in the target table.
+            </p>
+        </div>
         <div className="grid md:grid-cols-2 gap-6">
             <div className="space-y-4 p-4 border rounded-lg">
                 <h3 className="font-semibold flex items-center gap-2"><Info className="h-4 w-4" />Duplicate Handling</h3>
