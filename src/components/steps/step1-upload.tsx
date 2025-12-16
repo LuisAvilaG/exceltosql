@@ -118,16 +118,16 @@ export function Step1Upload({ onFileLoaded }: Step1UploadProps) {
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
-            onClick={() => document.getElementById('file-upload-input')?.click()}
           >
-            <UploadCloud className="w-12 h-12 text-muted-foreground" />
-            <p className="mt-4 text-center text-muted-foreground">
-              Drag and drop your file here, or{' '}
-              <span className="font-semibold text-primary">click to browse</span>
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">Only .xlsx files</p>
+            <label htmlFor="file-upload-input" className="flex flex-col items-center justify-center w-full h-full cursor-pointer">
+              <UploadCloud className="w-12 h-12 text-muted-foreground" />
+              <p className="mt-4 text-center text-muted-foreground">
+                Drag and drop your file here, or{' '}
+                <span className="font-semibold text-primary">click to browse</span>
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">Only .xlsx files</p>
+            </label>
             <input id="file-upload-input" type="file" accept=".xlsx" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleFileSelect} />
-
           </div>
         ) : (
           <div className="space-y-4">

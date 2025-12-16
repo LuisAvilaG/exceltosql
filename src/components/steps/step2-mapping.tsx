@@ -53,28 +53,27 @@ export function Step2Mapping({
   onBack,
 }: Step2MappingProps) {
   const [mapping, setMapping] = useState<ColumnMapping>({});
-  
-  // Start with required columns and any from the initial mapping
+  const [columnToAdd, setColumnToAdd] = useState('');
+
   const getInitialDestinationColumns = () => {
     const required = tableColumns.filter(c => c.isRequired && !c.isIdentity);
     const fromInitial = Object.keys(initialMapping)
                                 .map(key => tableColumns.find(c => c.name === key))
                                 .filter((c): c is SqlColumn => !!c && !c.isIdentity);
     const combined = [...required, ...fromInitial];
-    // Remove duplicates
     return Array.from(new Set(combined.map(c => c.name))).map(name => combined.find(c => c.name === name)!);
   };
 
   const [destinationColumns, setDestinationColumns] = useState<SqlColumn[]>(getInitialDestinationColumns);
 
   useEffect(() => {
-    // Auto-map based on similar names
     const autoMapping: ColumnMapping = {};
     destinationColumns.forEach(col => {
       const similarHeader = excelHeaders.find(h => h.toLowerCase().replace(/[^a-z0-9]/gi, '') === col.name.toLowerCase().replace(/[^a-z0-9]/gi, ''));
-      autoMapping[col.name] = similarHeader || null;
+      if (similarHeader) {
+        autoMapping[col.name] = similarHeader;
+      }
     });
-    // If there's an initial mapping, merge it
     setMapping(prev => ({...autoMapping, ...prev, ...initialMapping}));
   }, [excelHeaders, destinationColumns, initialMapping]);
   
@@ -91,11 +90,13 @@ export function Step2Mapping({
     onMappingComplete(mapping, settings);
   };
 
-  const addColumn = (columnName: string) => {
-    const columnToAdd = tableColumns.find(c => c.name === columnName);
-    if (columnToAdd && !destinationColumns.find(c => c.name === columnName)) {
-      setDestinationColumns(prev => [...prev, columnToAdd]);
+  const addColumn = () => {
+    if (!columnToAdd) return;
+    const column = tableColumns.find(c => c.name === columnToAdd);
+    if (column && !destinationColumns.find(c => c.name === columnToAdd)) {
+      setDestinationColumns(prev => [...prev, column]);
     }
+    setColumnToAdd('');
   };
 
   const removeColumn = (columnName: string) => {
@@ -218,7 +219,7 @@ export function Step2Mapping({
           </Table>
         </div>
         <div className="mt-4 flex items-center gap-2">
-            <Select onValueChange={addColumn} value="">
+            <Select onValueChange={setColumnToAdd} value={columnToAdd}>
                 <SelectTrigger className="w-[250px]">
                     <SelectValue placeholder="Add a destination column..." />
                 </SelectTrigger>
@@ -228,7 +229,7 @@ export function Step2Mapping({
                     ))}
                 </SelectContent>
             </Select>
-            <Button variant="outline" onClick={() => addColumn((document.querySelector('[data-radix-collection-item]') as HTMLElement)?.dataset.value || '')} disabled={availableColumnsToAdd.length === 0}>
+            <Button variant="outline" onClick={addColumn} disabled={!columnToAdd || availableColumnsToAdd.length === 0}>
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Add Column
             </Button>
