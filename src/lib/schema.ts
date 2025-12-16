@@ -1,3 +1,4 @@
+
 export type SqlColumn = {
   name: keyof typeof usaSalesByRevenueCenterSchema;
   type: 'int' | 'datetime' | 'varchar(100)' | 'decimal(38,0)' | 'decimal(10,0)';
