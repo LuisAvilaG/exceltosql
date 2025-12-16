@@ -13,7 +13,7 @@ export const usaSalesByRevenueCenterSchema = {
   MeraLocationId: { type: 'int' as const, isIdentity: false, isRequired: true, description: 'ID of the location' },
   MeraRevenueCenterName: { type: 'varchar(100)' as const, isIdentity: false, isRequired: false, description: 'Name of the revenue center' },
   MeraAreaId: { type: 'int' as const, isIdentity: false, isRequired: false, description: 'ID of the area' },
-  Sales: { type: 'decimal(38,0)' as const, isIdentity: false, isRequired: false, description: 'Total sales amount' },
+  Sales: { type: 'decimal(38,0)' as const, isIdentity: false, isRequired: true, description: 'Total sales amount' },
   Voids: { type: 'decimal(38,0)' as const, isIdentity: false, isRequired: false, description: 'Total voided amount' },
   Discounts: { type: 'decimal(38,0)' as const, isIdentity: false, isRequired: false, description: 'Total discount amount' },
   PaxCount: { type: 'int' as const, isIdentity: false, isRequired: false, description: 'Number of guests (pax)' },
