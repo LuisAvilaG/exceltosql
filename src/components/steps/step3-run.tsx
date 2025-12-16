@@ -26,6 +26,7 @@ import type { ColumnMapping, RunSettings, ExcelData } from '@/lib/types';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { useToast } from '@/hooks/use-toast';
+import { tableColumns } from '@/lib/schema';
 
 interface Step3RunProps {
   fileName: string;
@@ -48,6 +49,7 @@ type RunResults = {
 export function Step3Run({
   fileName,
   excelData,
+  columnMapping,
   onBack,
   onNewJob,
 }: Step3RunProps) {
@@ -63,11 +65,44 @@ export function Step3Run({
   const [strictMode, setStrictMode] = useState('tolerant');
   const [batchSize, setBatchSize] = useState('1000');
 
+  const processDataForImport = () => {
+    const allSqlColumns = tableColumns.map(c => c.name);
+
+    return excelData.map(excelRow => {
+        const transformedRow: { [key: string]: any } = {};
+
+        allSqlColumns.forEach(sqlCol => {
+            const mappedExcelCol = columnMapping[sqlCol];
+
+            if (mappedExcelCol && excelRow.hasOwnProperty(mappedExcelCol)) {
+                transformedRow[sqlCol] = excelRow[mappedExcelCol];
+            } else {
+                // Handle default values for unmapped columns
+                if (sqlCol === 'MeraAreaId') {
+                    transformedRow[sqlCol] = null;
+                } else if (sqlCol !== 'Id') { // Don't default identity column
+                    const columnSchema = tableColumns.find(c => c.name === sqlCol);
+                    if (columnSchema?.type.includes('decimal') || columnSchema?.type.includes('int')) {
+                       transformedRow[sqlCol] = 0;
+                    } else {
+                       transformedRow[sqlCol] = null;
+                    }
+                }
+            }
+        });
+        return transformedRow;
+    });
+  };
+
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
     let startTime: number;
 
     if (status === 'running') {
+      const processedData = processDataForImport();
+      console.log('Simulating import with processed data:', processedData.slice(0, 5));
+
       startTime = Date.now();
       setProgress(0);
       setEta('Calculating...');
@@ -101,6 +136,7 @@ export function Step3Run({
       }, 500);
     }
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, excelData.length]);
 
   const handleRun = (dryRun: boolean) => {
