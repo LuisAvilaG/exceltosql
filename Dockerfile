@@ -1,40 +1,54 @@
-# Use an official Node.js runtime as a parent image
-FROM node:20-alpine AS base
+# Dockerfile
 
-# Set the working directory in the container
+# 1. Builder stage: Build the Next.js application
+FROM node:20-slim AS builder
+
+# Set working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json (if available)
-COPY package*.json ./
-
-# --- Dependencies ---
-FROM base AS deps
 # Install dependencies
-RUN npm install
+# Copy package.json and lock file
+COPY package.json ./
+# Use package-lock.json if it exists
+COPY
+--if-exists=package-lock.json ./
+# Use yarn.lock if it exists
+COPY --if-exists=yarn.lock ./
+# Use pnpm-lock.yaml if it exists
+COPY --if-exists=pnpm-lock.yaml ./
 
-# --- Builder ---
-FROM base AS builder
-# Copy dependencies from the 'deps' stage
-COPY --from=deps /app/node_modules ./node_modules
-# Copy the rest of the application code
+# Install dependencies based on lock file
+RUN if [ -f package-lock.json ]; then npm ci; \
+    elif [ -f yarn.lock ]; then yarn install --frozen-lockfile; \
+    elif [ -f pnpm-lock.yaml ]; then npm i -g pnpm && pnpm i --frozen-lockfile; \
+    else npm install; fi
+
+# Copy the rest of the application source code
 COPY . .
 
-# Build the Next.js application for production
+# Build the Next.js application
 RUN npm run build
 
-# --- Runner ---
-FROM base AS runner
-# Set the NODE_ENV to production
+# 2. Runner stage: Create the final, lightweight image
+FROM node:20-slim AS runner
+
+WORKDIR /app
+
+# Set environment variables
 ENV NODE_ENV=production
 
-# Copy the built Next.js application from the 'builder' stage
+# Copy built app from builder stage
+COPY --from=builder /app/next.config.ts ./
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/public ./public
+
+# Conditionally copy public folder only if it exists in the builder stage
+COPY --from=builder --if-exists /app/public ./public
+
 
 # Expose the port the app runs on
 EXPOSE 3000
 
-# The command to start the application
-CMD ["npm", "start"]
+# Command to run the app
+CMD ["npm", "start", "-p", "3000"]
