@@ -82,10 +82,9 @@ export function Step2Mapping({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Paso 2: Mapeo de Columnas</CardTitle>
+        <CardTitle>Step 2: Column Mapping</CardTitle>
         <CardDescription>
-          Asigna las columnas de tu archivo Excel a las columnas de la tabla SQL
-          de destino.
+          Assign columns from your Excel file to the columns of the destination SQL table.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -93,9 +92,9 @@ export function Step2Mapping({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Columna SQL (Destino)</TableHead>
-                <TableHead>Columna Excel (Origen)</TableHead>
-                <TableHead className="text-center">Transformaciones</TableHead>
+                <TableHead>SQL Column (Destination)</TableHead>
+                <TableHead>Excel Column (Source)</TableHead>
+                <TableHead className="text-center">Transformations</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -105,7 +104,7 @@ export function Step2Mapping({
                     <div className="flex items-center gap-2">
                       <span>{col.name}</span>
                       <Badge variant="outline">{col.type}</Badge>
-                      {col.isRequired && <Badge variant="destructive">Requerido</Badge>}
+                      {col.isRequired && <Badge variant="destructive">Required</Badge>}
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger>
@@ -124,10 +123,10 @@ export function Step2Mapping({
                       onValueChange={(value) => handleMappingChange(col.name, value)}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar columna de origen" />
+                        <SelectValue placeholder="Select source column" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">-- Ignorar --</SelectItem>
+                        <SelectItem value="none">-- Ignore --</SelectItem>
                         {excelHeaders.map((header) => (
                           <SelectItem key={header} value={header}>
                             {header}
@@ -147,24 +146,24 @@ export function Step2Mapping({
                         <div className="grid gap-4">
                           <div className="space-y-2">
                             <h4 className="font-medium leading-none">
-                              Transformaciones
+                              Transformations
                             </h4>
                             <p className="text-sm text-muted-foreground">
-                              Aplica reglas a la columna '{mapping[col.name]}'.
+                              Apply rules to the '{mapping[col.name]}' column.
                             </p>
                           </div>
                           <div className="grid gap-2">
                             <div className="flex items-center space-x-2">
                                 <Checkbox id={`trim-${col.name}`} />
-                                <Label htmlFor={`trim-${col.name}`}>Quitar espacios (trim)</Label>
+                                <Label htmlFor={`trim-${col.name}`}>Trim spaces</Label>
                             </div>
                             <div className="flex items-center space-x-2">
                                 <Checkbox id={`clean-num-${col.name}`} disabled={!col.type.startsWith('decimal')} />
-                                <Label htmlFor={`clean-num-${col.name}`}>Limpiar números (ej. quitar '$', ',')</Label>
+                                <Label htmlFor={`clean-num-${col.name}`}>Clean numbers (e.g. remove '$', ',')</Label>
                             </div>
                             <div>
-                                <Label htmlFor={`default-${col.name}`}>Valor por defecto (si está vacío)</Label>
-                                <Input id={`default-${col.name}`} placeholder="Ej: 0 o N/A" className="mt-1" />
+                                <Label htmlFor={`default-${col.name}`}>Default value (if empty)</Label>
+                                <Input id={`default-${col.name}`} placeholder="e.g. 0 or N/A" className="mt-1" />
                             </div>
                           </div>
                         </div>
@@ -180,10 +179,10 @@ export function Step2Mapping({
       <CardFooter className="flex justify-between">
         <Button variant="outline" onClick={onBack}>
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Atrás
+          Back
         </Button>
         <Button onClick={handleNext}>
-          Siguiente: Ejecutar Carga
+          Next: Run Job
           <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
       </CardFooter>

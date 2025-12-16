@@ -75,7 +75,7 @@ export function Step1Upload({ onFileLoaded }: Step1UploadProps) {
         setPreviewData(mockExcelData.slice(0, 50));
         setHeaders(mockExcelHeaders);
       } else {
-        alert('Por favor, sube un archivo Excel (.xlsx).');
+        alert('Please upload an Excel file (.xlsx).');
       }
       e.dataTransfer.clearData();
     }
@@ -101,9 +101,9 @@ export function Step1Upload({ onFileLoaded }: Step1UploadProps) {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>Paso 1: Cargar Archivo Excel</CardTitle>
+        <CardTitle>Step 1: Upload Excel File</CardTitle>
         <CardDescription>
-          Arrastra y suelta tu archivo .xlsx o haz clic para seleccionarlo.
+          Drag and drop your .xlsx file here or click to select it.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -122,10 +122,10 @@ export function Step1Upload({ onFileLoaded }: Step1UploadProps) {
           >
             <UploadCloud className="w-12 h-12 text-muted-foreground" />
             <p className="mt-4 text-center text-muted-foreground">
-              Arrastra y suelta tu archivo aquí, o{' '}
-              <span className="font-semibold text-primary">haz clic</span>
+              Drag and drop your file here, or{' '}
+              <span className="font-semibold text-primary">click to browse</span>
             </p>
-            <p className="text-xs text-muted-foreground mt-1">Solo archivos .xlsx</p>
+            <p className="text-xs text-muted-foreground mt-1">Only .xlsx files</p>
             <input type="file" accept=".xlsx" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleFileSelect} />
 
           </div>
@@ -142,22 +142,22 @@ export function Step1Upload({ onFileLoaded }: Step1UploadProps) {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">
-                Seleccionar Hoja (Sheet)
+                Select Sheet
               </label>
               <Select defaultValue="Sheet1">
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecciona una hoja" />
+                  <SelectValue placeholder="Select a sheet" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Sheet1">Ventas USA (Sheet1)</SelectItem>
+                  <SelectItem value="Sheet1">USA Sales (Sheet1)</SelectItem>
                   <SelectItem value="Sheet2" disabled>
-                    Otra Hoja (Sheet2)
+                    Another Sheet (Sheet2)
                   </SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <h3 className="font-semibold mb-2">Previsualización de Datos</h3>
+              <h3 className="font-semibold mb-2">Data Preview</h3>
               <div className="h-80 overflow-auto border rounded-lg">
                 <Table>
                   <TableHeader className="sticky top-0 bg-card">
@@ -172,7 +172,7 @@ export function Step1Upload({ onFileLoaded }: Step1UploadProps) {
                       <TableRow key={rowIndex}>
                         {headers.map((header) => (
                           <TableCell key={`${rowIndex}-${header}`}>
-                            {row[header]}
+                            {String(row[header])}
                           </TableCell>
                         ))}
                       </TableRow>
@@ -190,7 +190,7 @@ export function Step1Upload({ onFileLoaded }: Step1UploadProps) {
           disabled={!file}
           className="ml-auto"
         >
-          Siguiente: Mapear Columnas
+          Next: Map Columns
           <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
       </CardFooter>

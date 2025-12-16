@@ -70,7 +70,7 @@ export function Step3Run({
     if (status === 'running') {
       startTime = Date.now();
       setProgress(0);
-      setEta('Calculando...');
+      setEta('Calculating...');
 
       interval = setInterval(() => {
         setProgress((prev) => {
@@ -83,8 +83,8 @@ export function Step3Run({
               skipped: 0,
               errors: 2,
               errorRows: [
-                { row: 4, column: 'SalesDate', value: 'Invalid Date', error: 'Formato de fecha inválido' },
-                { row: 5, column: 'MeraLocationId', value: 'ABC', error: 'Debe ser un número entero' }
+                { row: 4, column: 'SalesDate', value: 'Invalid Date', error: 'Invalid date format' },
+                { row: 5, column: 'MeraLocationId', value: 'ABC', error: 'Must be an integer' }
               ],
             });
             return 100;
@@ -94,7 +94,7 @@ export function Step3Run({
           const elapsedTime = (Date.now() - startTime) / 1000;
           const estimatedTotalTime = (elapsedTime / newProgress) * 100;
           const remainingTime = Math.round(estimatedTotalTime - elapsedTime);
-          setEta(`${remainingTime}s restantes`);
+          setEta(`${remainingTime}s remaining`);
 
           return newProgress;
         });
@@ -107,15 +107,15 @@ export function Step3Run({
     setIsDryRun(dryRun);
     setStatus('running');
     toast({
-      title: dryRun ? 'Iniciando simulación...' : 'Iniciando carga...',
-      description: `Procesando archivo ${fileName}.`
+      title: dryRun ? 'Starting simulation...' : 'Starting job...',
+      description: `Processing file ${fileName}.`
     });
   };
   
   const handleDownload = (type: 'errors' | 'summary') => {
       toast({
-          title: 'Función no implementada',
-          description: `La descarga del reporte de ${type} es una simulación.`,
+          title: 'Function not implemented',
+          description: `The ${type} report download is a simulation.`,
       });
   };
 
@@ -124,17 +124,17 @@ export function Step3Run({
       <Card>
         <CardHeader>
           <CardTitle>
-            {status === 'running' ? (isDryRun ? 'Simulando Carga...' : 'Ejecutando Carga...') : (isDryRun ? 'Simulación Completada' : 'Carga Completada')}
+            {status === 'running' ? (isDryRun ? 'Simulating Job...' : 'Running Job...') : (isDryRun ? 'Simulation Complete' : 'Job Complete')}
           </CardTitle>
           <CardDescription>
-            {status === 'running' ? `Procesando ${excelData.length} filas del archivo ${fileName}.` : `Resultados para ${fileName}.`}
+            {status === 'running' ? `Processing ${excelData.length} rows from ${fileName}.` : `Results for ${fileName}.`}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-2">
             <Progress value={progress} />
             <div className="flex justify-between text-sm text-muted-foreground">
-              <span>Progreso: {Math.round(progress)}%</span>
+              <span>Progress: {Math.round(progress)}%</span>
               {status === 'running' && <span>{eta}</span>}
             </div>
           </div>
@@ -143,33 +143,33 @@ export function Step3Run({
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center mb-6">
                     <div className="p-4 bg-secondary rounded-lg">
                         <p className="text-2xl font-bold">{results.total}</p>
-                        <p className="text-sm text-muted-foreground">Filas Totales</p>
+                        <p className="text-sm text-muted-foreground">Total Rows</p>
                     </div>
                     <div className="p-4 bg-secondary rounded-lg">
                         <p className="text-2xl font-bold text-green-600">{results.inserted}</p>
-                        <p className="text-sm text-muted-foreground">Insertadas</p>
+                        <p className="text-sm text-muted-foreground">Inserted</p>
                     </div>
                     <div className="p-4 bg-secondary rounded-lg">
                         <p className="text-2xl font-bold text-yellow-600">{results.skipped}</p>
-                        <p className="text-sm text-muted-foreground">Omitidas</p>
+                        <p className="text-sm text-muted-foreground">Skipped</p>
                     </div>
                     <div className="p-4 bg-secondary rounded-lg">
                         <p className="text-2xl font-bold text-destructive">{results.errors}</p>
-                        <p className="text-sm text-muted-foreground">Con Error</p>
+                        <p className="text-sm text-muted-foreground">Errors</p>
                     </div>
                 </div>
 
                 {results.errors > 0 && (
                     <div>
-                        <h3 className="font-semibold mb-2">Detalle de Errores</h3>
+                        <h3 className="font-semibold mb-2">Error Details</h3>
                         <div className="h-60 overflow-auto border rounded-lg">
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Fila (Excel)</TableHead>
-                                        <TableHead>Columna</TableHead>
-                                        <TableHead>Valor</TableHead>
-                                        <TableHead>Motivo del Error</TableHead>
+                                        <TableHead>Row (Excel)</TableHead>
+                                        <TableHead>Column</TableHead>
+                                        <TableHead>Value</TableHead>
+                                        <TableHead>Error Reason</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -194,17 +194,17 @@ export function Step3Run({
                 <div className="flex gap-2">
                     <Button variant="outline" onClick={() => handleDownload('errors')} disabled={!results?.errors}>
                         <Download className="mr-2 h-4 w-4" />
-                        Descargar Errores (CSV)
+                        Download Errors (CSV)
                     </Button>
                     <Button variant="outline" onClick={() => handleDownload('summary')}>
                         <Download className="mr-2 h-4 w-4" />
-                        Descargar Resumen
+                        Download Summary
                     </Button>
                 </div>
             )}
             <Button onClick={onNewJob} className="ml-auto">
                 <RefreshCw className="mr-2 h-4 w-4" />
-                Iniciar Nueva Carga
+                Start New Job
             </Button>
         </CardFooter>
       </Card>
@@ -214,63 +214,63 @@ export function Step3Run({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Paso 3: Configuración y Ejecución</CardTitle>
+        <CardTitle>Step 3: Configuration and Execution</CardTitle>
         <CardDescription>
-          Define los últimos detalles y comienza la carga de datos a SQL Server.
+          Define the final details and start the data load to SQL Server.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="grid md:grid-cols-2 gap-6">
             <div className="space-y-4 p-4 border rounded-lg">
-                <h3 className="font-semibold flex items-center gap-2"><Info className="h-4 w-4" />Estrategia de Duplicados</h3>
+                <h3 className="font-semibold flex items-center gap-2"><Info className="h-4 w-4" />Duplicate Handling</h3>
                 <RadioGroup value={duplicateStrategy} onValueChange={setDuplicateStrategy}>
                     <div className="flex items-center space-x-2">
                         <RadioGroupItem value="insert_only" id="r1" />
-                        <Label htmlFor="r1">Insertar todo (no revisa duplicados)</Label>
+                        <Label htmlFor="r1">Insert all (no duplicate check)</Label>
                     </div>
                     <div className="flex items-center space-x-2">
                         <RadioGroupItem value="skip" id="r2" />
-                        <Label htmlFor="r2">Omitir duplicados si ya existen</Label>
+                        <Label htmlFor="r2">Skip duplicates if they exist</Label>
                     </div>
                     <div className="flex items-center space-x-2">
                         <RadioGroupItem value="upsert" id="r3" />
-                        <Label htmlFor="r3">Actualizar si existe, insertar si no (Upsert)</Label>
+                        <Label htmlFor="r3">Update if exists, insert if not (Upsert)</Label>
                     </div>
                 </RadioGroup>
             </div>
             <div className="space-y-4 p-4 border rounded-lg">
-                <h3 className="font-semibold flex items-center gap-2"><Info className="h-4 w-4" />Manejo de Errores</h3>
+                <h3 className="font-semibold flex items-center gap-2"><Info className="h-4 w-4" />Error Handling</h3>
                 <RadioGroup value={strictMode} onValueChange={setStrictMode}>
                     <div className="flex items-center space-x-2">
                         <RadioGroupItem value="tolerant" id="r4" />
-                        <Label htmlFor="r4">Modo Tolerante (inserta filas válidas y reporta errores)</Label>
+                        <Label htmlFor="r4">Tolerant Mode (inserts valid rows, reports errors)</Label>
                     </div>
                     <div className="flex items-center space-x-2">
                         <RadioGroupItem value="strict" id="r5" />
-                        <Label htmlFor="r5">Modo Estricto (si hay 1 error, no inserta nada)</Label>
+                        <Label htmlFor="r5">Strict Mode (if one error occurs, nothing is inserted)</Label>
                     </div>
                 </RadioGroup>
             </div>
         </div>
         <div className="space-y-2">
-            <Label htmlFor="batch-size">Tamaño de Lote (batch size)</Label>
-            <Input id="batch-size" type="number" value={batchSize} onChange={e => setBatchSize(e.target.value)} placeholder="Ej: 1000" />
-            <p className="text-xs text-muted-foreground">Número de filas a insertar por transacción.</p>
+            <Label htmlFor="batch-size">Batch Size</Label>
+            <Input id="batch-size" type="number" value={batchSize} onChange={e => setBatchSize(e.target.value)} placeholder="e.g. 1000" />
+            <p className="text-xs text-muted-foreground">Number of rows to insert per transaction.</p>
         </div>
       </CardContent>
       <CardFooter className="flex justify-between">
         <Button variant="outline" onClick={onBack}>
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Atrás
+          Back
         </Button>
         <div className="flex gap-2">
             <Button variant="outline" onClick={() => handleRun(true)}>
                 <Play className="mr-2 h-4 w-4" />
-                Simulación (Dry Run)
+                Dry Run
             </Button>
             <Button onClick={() => handleRun(false)} className="bg-accent text-accent-foreground hover:bg-accent/90">
                 <ArrowRight className="mr-2 h-4 w-4" />
-                Iniciar Carga
+                Start Job
             </Button>
         </div>
       </CardFooter>

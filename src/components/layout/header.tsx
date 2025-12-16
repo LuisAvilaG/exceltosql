@@ -61,8 +61,8 @@ export function Header() {
 
   const handleDownloadLogs = (jobId: string) => {
     toast({
-      title: 'Función no implementada',
-      description: `La descarga de logs para el trabajo ${jobId} es una simulación.`,
+      title: 'Function not implemented',
+      description: `Log download for job ${jobId} is a simulation.`,
     });
   };
 
@@ -86,31 +86,31 @@ export function Header() {
             onClick={() => setIsTestConnOpen(true)}
           >
             <TestTube2 className="mr-2 h-4 w-4" />
-            Probar Conexión
+            Test Connection
           </Button>
 
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="outline" size="sm">
                 <History className="mr-2 h-4 w-4" />
-                Historial de Cargas
+                Job History
               </Button>
             </SheetTrigger>
             <SheetContent className="sm:max-w-3xl w-full">
               <SheetHeader>
-                <SheetTitle>Historial de Cargas</SheetTitle>
+                <SheetTitle>Job History</SheetTitle>
                 <SheetDescription>
-                  Revisa el estado y los resultados de las cargas anteriores.
+                  Review the status and results of previous jobs.
                 </SheetDescription>
               </SheetHeader>
               <div className="mt-4">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Archivo</TableHead>
-                      <TableHead>Fecha</TableHead>
-                      <TableHead>Resultado</TableHead>
-                      <TableHead className="text-right">Acciones</TableHead>
+                      <TableHead>File</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Result</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -120,7 +120,7 @@ export function Header() {
                           {job.fileName}
                         </TableCell>
                         <TableCell>
-                          {format(job.date, 'dd/MM/yyyy HH:mm')}
+                          {format(job.date, 'MM/dd/yyyy HH:mm')}
                         </TableCell>
                         <TableCell>{job.result}</TableCell>
                         <TableCell className="text-right">
@@ -128,7 +128,7 @@ export function Header() {
                             variant="ghost"
                             size="icon"
                             onClick={() => handleDownloadLogs(job.id)}
-                            aria-label="Descargar logs"
+                            aria-label="Download logs"
                           >
                             <Download className="h-4 w-4" />
                           </Button>
@@ -146,35 +146,34 @@ export function Header() {
       <Dialog open={isTestConnOpen} onOpenChange={setIsTestConnOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Probar Conexión a SQL Server</DialogTitle>
+            <DialogTitle>Test SQL Server Connection</DialogTitle>
             <DialogDescription>
-              Verifica si la aplicación puede conectarse a la base de datos con
-              la configuración actual.
+              Check if the application can connect to the database with the
+              current configuration.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <p className="text-sm text-muted-foreground">
-              Las credenciales de conexión se configuran mediante variables de
-              entorno (ej. SQL_HOST, SQL_USER, etc.) y no se muestran aquí por
-              seguridad.
+              Connection credentials are set via environment variables (e.g.
+              SQL_HOST, SQL_USER, etc.) and are not displayed here for
+              security.
             </p>
             {testStatus === 'success' && (
               <Alert variant="default" className="border-green-500">
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
-                <AlertTitle>Conexión Exitosa</AlertTitle>
+                <AlertTitle>Connection Successful</AlertTitle>
                 <AlertDescription>
-                  La conexión con la base de datos se ha establecido
-                  correctamente.
+                  The connection to the database was established successfully.
                 </AlertDescription>
               </Alert>
             )}
             {testStatus === 'error' && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Error de Conexión</AlertTitle>
+                <AlertTitle>Connection Error</AlertTitle>
                 <AlertDescription>
-                  No se pudo conectar a la base de datos. Revisa las variables
-                  de entorno y la red.
+                  Could not connect to the database. Check your environment
+                  variables and network connection.
                 </AlertDescription>
               </Alert>
             )}
@@ -184,9 +183,7 @@ export function Header() {
               onClick={handleTestConnection}
               disabled={testStatus === 'testing'}
             >
-              {testStatus === 'testing'
-                ? 'Probando...'
-                : 'Iniciar Prueba'}
+              {testStatus === 'testing' ? 'Testing...' : 'Run Test'}
             </Button>
           </DialogFooter>
         </DialogContent>
