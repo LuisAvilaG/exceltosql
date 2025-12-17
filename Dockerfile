@@ -1,44 +1,50 @@
-# 1. Builder Stage
-# This stage builds the Next.js application
-FROM node:18-alpine AS builder
-
-# Set working directory
+# 1. Installer Stage: Install dependencies
+FROM --platform=linux/amd64 node:20-alpine AS installer
 WORKDIR /app
 
-# Install dependencies
-# We copy package.json and lock files first to leverage Docker cache
 COPY package.json ./
-COPY --if-exists package-lock.json ./
 COPY --if-exists yarn.lock ./
-RUN npm install --frozen-lockfile
+COPY --if-exists pnpm-lock.yaml ./
+
+# Install dependencies based on which lock file exists
+RUN if [ -f pnpm-lock.yaml ]; then \
+      npm install -g pnpm && pnpm install; \
+    elif [ -f yarn.lock ]; then \
+      yarn install; \
+    else \
+      npm install; \
+    fi
+
+
+# 2. Builder Stage: Build the Next.js application
+FROM --platform=linux/amd64 node:20-alpine AS builder
+WORKDIR /app
+
+# Copy dependencies from the installer stage
+COPY --from=installer /app/node_modules ./node_modules
+COPY package.json ./
 
 # Copy the rest of the application source code
 COPY . .
 
-# Set build-time environment variables
-ENV NEXT_TELEMETRY_DISABLED 1
-
-# Build the Next.js application
-# The output will be in the .next folder
+# Run the build command
 RUN npm run build
 
-# 2. Runner Stage
-# This stage creates the final, lightweight production image
-FROM node:18-alpine AS runner
 
+# 3. Runner Stage: Create the final, small production image
+FROM --platform=linux/amd64 node:20-alpine AS runner
 WORKDIR /app
 
-# Set environment variables for production
-ENV NODE_ENV production
+# Set environment variables
+ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED 1
 
 # Create a non-root user for security
-# The `nextjs` user is created with a home directory at /app
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# The standalone output is self-contained and doesn't need node_modules
-# It includes a minimal server.js file
+# Copy only the necessary files for a standalone Next.js app
+COPY --from=builder /app/package.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
@@ -48,5 +54,5 @@ USER nextjs
 # Expose the port the app runs on
 EXPOSE 3000
 
-# Set the entrypoint to start the app
+# Set the entrypoint to run the Next.js server
 CMD ["node", "server.js"]
