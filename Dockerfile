@@ -1,59 +1,23 @@
-# Dockerfile
+# 1. Use an official Node.js runtime as a parent image
+FROM node:20-slim
 
-# Stage 1: Builder
-# This stage installs dependencies and builds the application
-FROM node:18-alpine AS builder
-
-# Set the working directory in the container
+# 2. Set the working directory in the container
 WORKDIR /app
 
-# Copy package.json and lock file
-COPY package*.json ./
+# 3. Copy package.json and install dependencies
+# We copy only package.json first to leverage Docker's cache.
+COPY package.json ./
+RUN npm install
 
-# Install dependencies based on the lock file
-RUN npm install --frozen-lockfile
-
-# Copy the rest of the application source code
+# 4. Copy the rest of your application's code
 COPY . .
 
-# Build the Next.js application
-# Disable Next.js telemetry during the build
-ENV NEXT_TELEMETRY_DISABLED 1
+# 5. Build the Next.js application
 RUN npm run build
 
-
-# Stage 2: Runner
-# This stage creates the final, lightweight production-ready image
-FROM node:18-alpine AS runner
-
-# Set the working directory
-WORKDIR /app
-
-# Set the environment to production
-ENV NODE_ENV=production
-# Disable Next.js telemetry
-ENV NEXT_TELEMETRY_DISABLED 1
-
-# Create a non-root user for security
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
-# Copy built assets from the builder stage
-COPY --from=builder /app/next.config.ts ./
-COPY --from=builder /app/package.json ./
-# The public folder is optional, copy it only if it exists
-COPY --from=builder --chown=nextjs:nodejs --if-exists /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
-# Change the owner of the working directory to the new user
-USER nextjs
-
-# Expose the port the app runs on
+# 6. Expose the port the app runs on
 EXPOSE 3000
 
-# Set the host to 0.0.0.0 to accept connections from outside the container
-ENV HOSTNAME "0.0.0.0"
+# 7. Define the command to run your app
+CMD ["npm", "start"]
 
-# The command to start the app
-CMD ["node", "server.js"]
