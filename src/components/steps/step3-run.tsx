@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Card,
   CardContent,
@@ -59,7 +59,8 @@ export function Step3Run({
   const [batchSize, setBatchSize] = useState('1000');
   const [deleteAll, setDeleteAll] = useState(false);
 
-  const handleRun = async (dryRun: boolean) => {
+  const handleRun = (dryRun: boolean) => {
+    // 1. Immediately update UI to show loading state
     setIsDryRun(dryRun);
     setStatus('running');
     setResults(null);
@@ -68,39 +69,48 @@ export function Step3Run({
       description: `Validating ${excelData.length} rows from ${fileName}.`
     });
 
-    try {
-        const currentSettings: RunSettings = {
-            duplicateStrategy: duplicateStrategy as any,
-            strictMode: strictMode === 'strict',
-            batchSize: parseInt(batchSize, 10) || 1000,
-        };
-        // The validateData function is now a server action, so this call will
-        // execute on the server, not the client, preventing UI freeze.
-        const validationResult = await validateData({
-            excelData,
-            columnMapping,
-            settings: currentSettings,
-            isDryRun: dryRun,
-        });
-        setResults(validationResult);
-
-        if(dryRun) {
-            toast({
-                title: "Simulation Complete",
-                description: `Found ${validationResult.errors} potential errors in ${validationResult.errorDetails.length} rows.`,
+    // 2. Define the async operation to run in the background
+    const runValidation = async () => {
+        try {
+            const currentSettings: RunSettings = {
+                duplicateStrategy: duplicateStrategy as any,
+                strictMode: strictMode === 'strict',
+                batchSize: parseInt(batchSize, 10) || 1000,
+            };
+            
+            // This server action runs on the server. The `await` here
+            // does not block the UI because this function is async.
+            const validationResult = await validateData({
+                excelData,
+                columnMapping,
+                settings: currentSettings,
+                isDryRun: dryRun,
             });
-        }
+            
+            setResults(validationResult);
 
-    } catch (error) {
-        console.error("Validation failed", error);
-        toast({
-            variant: "destructive",
-            title: "An Error Occurred",
-            description: error instanceof Error ? error.message : "Could not complete the run.",
-        });
-    } finally {
-        setStatus('finished');
-    }
+            if(dryRun) {
+                toast({
+                    title: "Simulation Complete",
+                    description: `Found ${validationResult.errors} rows with errors.`,
+                });
+            }
+
+        } catch (error) {
+            console.error("Validation failed", error);
+            toast({
+                variant: "destructive",
+                title: "An Error Occurred",
+                description: error instanceof Error ? error.message : "Could not complete the run.",
+            });
+        } finally {
+            // 3. Update UI again when the background task is finished
+            setStatus('finished');
+        }
+    };
+    
+    // 4. Execute the async operation. This call returns immediately.
+    runValidation();
   };
   
   const handleDownload = (type: 'errors' | 'summary') => {
