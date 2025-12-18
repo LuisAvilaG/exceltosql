@@ -77,7 +77,7 @@ export function Step3Run({
         totalRows: excelData.length,
         validRows: validRowCount,
         errors: Array.from(new Set(errorDetails.map(e => e.row))).length,
-        skipped: 0,
+        skipped: 0, // This is a simulation, so no rows are actually skipped.
         errorDetails: errorDetails,
       };
       setResults(finalResults);
@@ -99,7 +99,7 @@ export function Step3Run({
       batchData.forEach((excelRow, batchIndex) => {
         let rowHasError = false;
         const originalIndex = currentIndex + batchIndex;
-        const excelRowNumber = originalIndex + 2;
+        const excelRowNumber = originalIndex + 2; // +1 for zero-index, +1 for header row
 
         const transformedRow: { [key: string]: any } = {};
         for (const sqlCol of tableColumns) {
@@ -110,14 +110,20 @@ export function Step3Run({
 
         for (const sqlCol of tableColumns) {
           if (sqlCol.isIdentity) continue;
+          
           const rawValue = transformedRow[sqlCol.name];
 
+          // 1. Check for required values
           if (sqlCol.isRequired && (rawValue === undefined || rawValue === null || String(rawValue).trim() === '')) {
             batchErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue ?? 'NULL'), error: `Required value is missing.` });
             rowHasError = true;
-            continue;
+            continue; // Skip further validation for this column
           }
-          if (!sqlCol.isRequired && (rawValue === undefined || rawValue === null || String(rawValue).trim() === '')) continue;
+
+          // If not required and empty, skip further validation
+          if (!sqlCol.isRequired && (rawValue === undefined || rawValue === null || String(rawValue).trim() === '')) {
+              continue;
+          }
           
           let parsedValue: any = rawValue;
           switch(sqlCol.type) {
@@ -130,6 +136,7 @@ export function Step3Run({
                 break;
             case 'decimal(38,0)':
             case 'decimal(10,0)':
+                // Allow for currency symbols and commas
                 const cleanedValue = String(rawValue).replace(/[$,]/g, '');
                 parsedValue = parseFloat(cleanedValue);
                 if (isNaN(parsedValue)) {
@@ -139,6 +146,8 @@ export function Step3Run({
                 break;
             case 'datetime':
                 if (typeof rawValue === 'number' && rawValue > 0) {
+                    // It's likely an Excel date serial number.
+                    // Excel serial date for 1900-01-01 is 1, but JS epoch is different. 25569 is the offset.
                     const date = new Date(Math.round((rawValue - 25569) * 86400 * 1000));
                      if (!isValid(date)) {
                         batchErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Invalid Excel date serial number.' });
@@ -146,11 +155,15 @@ export function Step3Run({
                     }
                 } else {
                     const dateStr = String(rawValue);
-                    const supportedFormats = ['yyyy-MM-dd', 'MM/dd/yyyy', "yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd HH:mm:ss"];
+                    // Try parsing multiple common date formats
+                    const supportedFormats = ["yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd HH:mm:ss", 'yyyy-MM-dd', 'MM/dd/yyyy'];
                     let parsedDate = null;
                     for(const format of supportedFormats) {
                         const d = parse(dateStr, format, new Date());
-                        if (isValid(d)) { parsedDate = d; break; }
+                        if (isValid(d)) {
+                            parsedDate = d;
+                            break;
+                        }
                     }
                     if (!parsedDate) {
                         batchErrors.push({ row: excelRowNumber, column: sqlCol.name, value: dateStr, error: 'Invalid or unsupported date format.' });
@@ -169,7 +182,9 @@ export function Step3Run({
                 break;
           }
         }
-        if (!rowHasError) batchValidRows++;
+        if (!rowHasError) {
+          batchValidRows++;
+        }
       });
       
       setErrorDetails(prev => [...prev, ...batchErrors]);
@@ -177,7 +192,7 @@ export function Step3Run({
       setCurrentIndex(end);
     };
     
-    // Use requestIdleCallback or setTimeout to avoid blocking the main thread
+    // Use a small timeout to allow the UI to update before processing the next batch
     const handle = setTimeout(processBatch, 0);
     return () => clearTimeout(handle);
 
@@ -363,3 +378,5 @@ export function Step3Run({
     </Card>
   );
 }
+
+    
