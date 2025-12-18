@@ -76,8 +76,6 @@ export function Step2Mapping({
       if (col.isRequired && !col.isIdentity) return true;
       // Include if it was auto-mapped
       if (matchedSqlColumns.has(col.name)) return true;
-       // Include if it's in the initial mapping from a previous step
-      if (Object.keys(initialMapping).includes(col.name)) return true;
       
       return false;
     });
