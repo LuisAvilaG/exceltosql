@@ -95,24 +95,14 @@ export function Step3Run({
               const excelRowNumber = originalIndex + 2; 
 
               const transformedRow: { [key: string]: any } = {};
-              for (const sqlCol of tableColumns) {
-                  const mappedExcelCol = columnMapping[sqlCol.name];
-                  if (mappedExcelCol) {
-                      transformedRow[sqlCol.name] = excelRow[mappedExcelCol];
-                  }
-              }
-
+              
+              // Iterate over all possible SQL columns, not just the mapped ones
               for (const sqlCol of tableColumns) {
                 if (sqlCol.isIdentity) continue;
-                
-                let rawValue = transformedRow[sqlCol.name];
-                let parsedValue: any = rawValue;
 
-                if (sqlCol.isRequired && (rawValue === undefined || rawValue === null || String(rawValue).trim() === '')) {
-                  localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue ?? 'NULL'), error: `Required value is missing.` });
-                  rowHasError = true;
-                  continue;
-                }
+                const mappedExcelCol = columnMapping[sqlCol.name];
+                const rawValue = mappedExcelCol ? excelRow[mappedExcelCol] : undefined;
+                let parsedValue: any = rawValue;
 
                 // Handle unmapped or empty, non-required columns
                 if (!sqlCol.isRequired && (rawValue === undefined || rawValue === null || String(rawValue).trim() === '')) {
@@ -124,9 +114,17 @@ export function Step3Run({
                         parsedValue = null;
                     }
                     transformedRow[sqlCol.name] = parsedValue;
-                    continue; // Skip further validation for this empty/unmapped column
+                    continue; // Skip further validation for this column
+                }
+
+                // Check for required value missing
+                if (sqlCol.isRequired && (rawValue === undefined || rawValue === null || String(rawValue).trim() === '')) {
+                  localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue ?? 'NULL'), error: `Required value is missing.` });
+                  rowHasError = true;
+                  continue; // Go to next column
                 }
                 
+                // Validate and parse based on type
                 switch(sqlCol.type) {
                     case 'int':
                         parsedValue = parseInt(String(rawValue), 10);
@@ -146,7 +144,6 @@ export function Step3Run({
                         break;
                     case 'datetime':
                         if (typeof rawValue === 'number') {
-                             // Handle Excel serial date number
                              const date = new Date(Math.round((rawValue - 25569) * 86400 * 1000));
                              if (!isValid(date)) {
                                 localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Invalid Excel date serial number.' });
@@ -156,16 +153,12 @@ export function Step3Run({
                             }
                         } else {
                             const dateStr = String(rawValue);
-                            // More robust parsing for various string formats
                             const supportedFormats = ["yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd HH:mm:ss", 'yyyy-MM-dd', 'MM/dd/yyyy'];
                             let parsedDate = null;
-                            
-                            // Check if it's already a valid ISO string
                             const isoDate = new Date(dateStr);
                             if (isValid(isoDate) && dateStr.includes('T')) {
                                 parsedDate = isoDate;
                             } else {
-                                // Try other formats
                                 for(const format of supportedFormats) {
                                     const d = parse(dateStr, format, new Date());
                                     if (isValid(d)) {
@@ -174,7 +167,6 @@ export function Step3Run({
                                     }
                                 }
                             }
-
                             if (!parsedDate) {
                                 localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: dateStr, error: 'Invalid or unsupported date format.' });
                                 rowHasError = true;
@@ -194,6 +186,7 @@ export function Step3Run({
                 }
                 transformedRow[sqlCol.name] = parsedValue;
               }
+
               if (!rowHasError) {
                 localValidRows.push(transformedRow);
               }
@@ -201,7 +194,7 @@ export function Step3Run({
           
           processedCount += batch.length;
           setProgress(Math.round((processedCount / totalRows) * 100));
-          await new Promise(resolve => setTimeout(resolve, 0)); // Yield to main thread
+          await new Promise(resolve => setTimeout(resolve, 0));
       }
 
       setErrorDetails(localErrors);
@@ -486,3 +479,5 @@ export function Step3Run({
     </Card>
   );
 }
+
+    
