@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -30,6 +31,7 @@ import {
 import { UploadCloud, FileSpreadsheet, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ExcelData } from '@/app/page';
+import { isValid } from 'date-fns';
 
 interface Step1UploadProps {
   onFileLoaded: (data: ExcelData, headers: string[], fileName: string) => void;
@@ -72,7 +74,8 @@ export function Step1Upload({ onFileLoaded }: Step1UploadProps) {
       const reader = new FileReader();
       reader.onload = (e) => {
         const data = e.target?.result;
-        const wb = XLSX.read(data, { type: 'array' });
+        // Use {cellDates: true} to parse dates correctly
+        const wb = XLSX.read(data, { type: 'array', cellDates: true });
         setWorkbook(wb);
         const sheets = wb.SheetNames;
         setSheetNames(sheets);
@@ -91,15 +94,37 @@ export function Step1Upload({ onFileLoaded }: Step1UploadProps) {
     if (!wb) return;
     setSelectedSheet(sheetName);
     const ws = wb.Sheets[sheetName];
-    const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
-    if (jsonData.length > 0) {
-        const fileHeaders = jsonData[0].map(String);
+    // Use {raw: false} with sheet_to_json to get formatted strings
+    const dataRows = XLSX.utils.sheet_to_json(ws, { raw: false, cellDates: true }) as ExcelData;
+    
+    if (dataRows.length > 0) {
+        const fileHeaders = Object.keys(dataRows[0]);
+        
+        // Post-process rows to format dates
+        const formattedData = dataRows.map(row => {
+            const newRow = {...row};
+            fileHeaders.forEach(header => {
+                const value = newRow[header];
+                if (value instanceof Date && isValid(value)) {
+                    // Format date to YYYY-MM-DD
+                    newRow[header] = value.toISOString().split('T')[0];
+                }
+            });
+            return newRow;
+        });
+
         setHeaders(fileHeaders);
-        const dataRows = XLSX.utils.sheet_to_json(ws) as ExcelData;
-        setFullData(dataRows);
-        setPreviewData(dataRows.slice(0, 50));
+        setFullData(formattedData);
+        setPreviewData(formattedData.slice(0, 50));
     } else {
-        setHeaders([]);
+        // Fallback for empty sheets or sheets with only a header
+        const headerData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+        if (headerData.length > 0) {
+            const fileHeaders = headerData[0].map(String);
+            setHeaders(fileHeaders);
+        } else {
+            setHeaders([]);
+        }
         setPreviewData([]);
         setFullData([]);
     }
@@ -229,3 +254,5 @@ export function Step1Upload({ onFileLoaded }: Step1UploadProps) {
     </Card>
   );
 }
+
+    
