@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { DragEvent } from 'react';
+import * as XLSX from 'xlsx';
 import {
   Card,
   CardContent,
@@ -28,7 +29,6 @@ import {
 } from '@/components/ui/select';
 import { UploadCloud, FileSpreadsheet, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { mockExcelData, mockExcelHeaders } from '@/lib/placeholder-data';
 import type { ExcelData } from '@/app/page';
 
 interface Step1UploadProps {
@@ -40,6 +40,10 @@ export function Step1Upload({ onFileLoaded }: Step1UploadProps) {
   const [file, setFile] = useState<File | null>(null);
   const [previewData, setPreviewData] = useState<ExcelData>([]);
   const [headers, setHeaders] = useState<string[]>([]);
+  const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
+  const [sheetNames, setSheetNames] = useState<string[]>([]);
+  const [selectedSheet, setSelectedSheet] = useState('');
+  const [fullData, setFullData] = useState<ExcelData>([]);
 
   const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -65,13 +69,41 @@ export function Step1Upload({ onFileLoaded }: Step1UploadProps) {
       file.name.endsWith('.xlsx')
     ) {
       setFile(file);
-      // Simulate file parsing
-      setPreviewData(mockExcelData.slice(0, 50));
-      setHeaders(mockExcelHeaders);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const data = e.target?.result;
+        const wb = XLSX.read(data, { type: 'array' });
+        setWorkbook(wb);
+        const sheets = wb.SheetNames;
+        setSheetNames(sheets);
+        if (sheets.length > 0) {
+            handleSheetChange(sheets[0], wb);
+            setSelectedSheet(sheets[0]);
+        }
+      };
+      reader.readAsArrayBuffer(file);
     } else {
       alert('Please upload an Excel file (.xlsx).');
     }
-  }
+  };
+
+  const handleSheetChange = (sheetName: string, wb: XLSX.WorkBook | null = workbook) => {
+    if (!wb) return;
+    setSelectedSheet(sheetName);
+    const ws = wb.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+    if (jsonData.length > 0) {
+        const fileHeaders = jsonData[0].map(String);
+        setHeaders(fileHeaders);
+        const dataRows = XLSX.utils.sheet_to_json(ws) as ExcelData;
+        setFullData(dataRows);
+        setPreviewData(dataRows.slice(0, 50));
+    } else {
+        setHeaders([]);
+        setPreviewData([]);
+        setFullData([]);
+    }
+  };
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -83,17 +115,16 @@ export function Step1Upload({ onFileLoaded }: Step1UploadProps) {
       e.dataTransfer.clearData();
     }
   };
-  
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-        processFile(e.target.files[0]);
+      processFile(e.target.files[0]);
     }
   };
 
-
   const handleNextStep = () => {
     if (file) {
-      onFileLoaded(mockExcelData, mockExcelHeaders, file.name);
+      onFileLoaded(fullData, headers, file.name);
     }
   };
 
@@ -127,7 +158,7 @@ export function Step1Upload({ onFileLoaded }: Step1UploadProps) {
               </p>
               <p className="text-xs text-muted-foreground mt-1">Only .xlsx files</p>
             </label>
-            <input id="file-upload-input" type="file" accept=".xlsx" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleFileSelect} />
+            <input id="file-upload-input" type="file" accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleFileSelect} />
           </div>
         ) : (
           <div className="space-y-4">
@@ -140,22 +171,23 @@ export function Step1Upload({ onFileLoaded }: Step1UploadProps) {
                 </p>
               </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Select Sheet
-              </label>
-              <Select defaultValue="Sheet1">
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a sheet" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Sheet1">USA Sales (Sheet1)</SelectItem>
-                  <SelectItem value="Sheet2" disabled>
-                    Another Sheet (Sheet2)
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {sheetNames.length > 0 && (
+                <div className="space-y-2">
+                <label className="text-sm font-medium">
+                    Select Sheet
+                </label>
+                <Select value={selectedSheet} onValueChange={handleSheetChange}>
+                    <SelectTrigger>
+                    <SelectValue placeholder="Select a sheet" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {sheetNames.map(name => (
+                            <SelectItem key={name} value={name}>{name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                </div>
+            )}
             <div>
               <h3 className="font-semibold mb-2">Data Preview</h3>
               <div className="h-80 overflow-auto border rounded-lg">
@@ -172,7 +204,7 @@ export function Step1Upload({ onFileLoaded }: Step1UploadProps) {
                       <TableRow key={rowIndex}>
                         {headers.map((header) => (
                           <TableCell key={`${rowIndex}-${header}`}>
-                            {String(row[header])}
+                            {String(row[header] ?? '')}
                           </TableCell>
                         ))}
                       </TableRow>
