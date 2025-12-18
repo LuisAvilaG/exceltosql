@@ -105,7 +105,8 @@ export function Step3Run({
               for (const sqlCol of tableColumns) {
                 if (sqlCol.isIdentity) continue;
                 
-                const rawValue = transformedRow[sqlCol.name];
+                let rawValue = transformedRow[sqlCol.name];
+                let parsedValue: any = rawValue;
 
                 if (sqlCol.isRequired && (rawValue === undefined || rawValue === null || String(rawValue).trim() === '')) {
                   localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue ?? 'NULL'), error: `Required value is missing.` });
@@ -113,19 +114,19 @@ export function Step3Run({
                   continue;
                 }
 
-                // Handle unmapped, non-required columns
+                // Handle unmapped or empty, non-required columns
                 if (!sqlCol.isRequired && (rawValue === undefined || rawValue === null || String(rawValue).trim() === '')) {
                     if (sqlCol.name === 'MeraAreaId') {
-                        transformedRow[sqlCol.name] = null;
+                        parsedValue = null;
                     } else if (sqlCol.type.startsWith('decimal') || sqlCol.type === 'int') {
-                        transformedRow[sqlCol.name] = 0;
+                        parsedValue = 0;
                     } else {
-                        transformedRow[sqlCol.name] = null;
+                        parsedValue = null;
                     }
-                    continue;
+                    transformedRow[sqlCol.name] = parsedValue;
+                    continue; // Skip further validation for this empty/unmapped column
                 }
                 
-                let parsedValue: any = rawValue;
                 switch(sqlCol.type) {
                     case 'int':
                         parsedValue = parseInt(String(rawValue), 10);
