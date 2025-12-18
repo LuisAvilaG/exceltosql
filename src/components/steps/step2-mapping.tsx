@@ -254,5 +254,3 @@ export function Step2Mapping({
     </Card>
   );
 }
-
-    
