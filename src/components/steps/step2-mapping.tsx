@@ -52,30 +52,42 @@ export function Step2Mapping({
   onMappingComplete,
   onBack,
 }: Step2MappingProps) {
-  const [mapping, setMapping] = useState<ColumnMapping>({});
+  const [mapping, setMapping] = useState<ColumnMapping>(initialMapping);
+  const [destinationColumns, setDestinationColumns] = useState<SqlColumn[]>([]);
   const [columnToAdd, setColumnToAdd] = useState('');
 
-  const getInitialDestinationColumns = () => {
-    const required = tableColumns.filter(c => c.isRequired && !c.isIdentity);
-    const fromInitial = Object.keys(initialMapping)
-                                .map(key => tableColumns.find(c => c.name === key))
-                                .filter((c): c is SqlColumn => !!c && !c.isIdentity);
-    const combined = [...required, ...fromInitial];
-    return Array.from(new Set(combined.map(c => c.name))).map(name => combined.find(c => c.name === name)!);
-  };
-
-  const [destinationColumns, setDestinationColumns] = useState<SqlColumn[]>(getInitialDestinationColumns);
-
   useEffect(() => {
+    // Auto-map on first load and determine which columns to show
     const autoMapping: ColumnMapping = {};
-    destinationColumns.forEach(col => {
-      const similarHeader = excelHeaders.find(h => h.toLowerCase().replace(/[^a-z0-9]/gi, '') === col.name.toLowerCase().replace(/[^a-z0-9]/gi, ''));
+    const matchedSqlColumns = new Set<string>();
+
+    tableColumns.forEach(sqlCol => {
+      // Find a matching excel header
+      const similarHeader = excelHeaders.find(h => h.toLowerCase().replace(/[^a-z0-9]/gi, '') === sqlCol.name.toLowerCase().replace(/[^a-z0-9]/gi, ''));
       if (similarHeader) {
-        autoMapping[col.name] = similarHeader;
+        autoMapping[sqlCol.name] = similarHeader;
+        matchedSqlColumns.add(sqlCol.name);
       }
     });
-    setMapping(prev => ({...autoMapping, ...prev, ...initialMapping}));
-  }, [excelHeaders, destinationColumns, initialMapping]);
+
+    // Determine initial columns to display
+    const initialCols = tableColumns.filter(col => {
+      // Always include required columns
+      if (col.isRequired && !col.isIdentity) return true;
+      // Include if it was auto-mapped
+      if (matchedSqlColumns.has(col.name)) return true;
+       // Include if it's in the initial mapping from a previous step
+      if (Object.keys(initialMapping).includes(col.name)) return true;
+      
+      return false;
+    });
+
+    setDestinationColumns(initialCols);
+    setMapping(prev => ({ ...autoMapping, ...prev }));
+
+  // We run this only once on mount to set the initial state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   
   const handleMappingChange = (sqlColumn: string, excelColumn: string) => {
     setMapping((prev) => ({ ...prev, [sqlColumn]: excelColumn === 'none' ? null : excelColumn }));
