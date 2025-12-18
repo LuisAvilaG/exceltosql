@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 
 export type ExcelData = { [key: string]: any };
@@ -67,3 +68,17 @@ export const RunJobOutputSchema = z.object({
   })).optional(),
 });
 export type RunJobOutput = z.infer<typeof RunJobOutputSchema>;
+
+export type DataContextType = {
+  step: number;
+  setStep: (step: number) => void;
+  excelData: ExcelData[];
+  setExcelData: (data: ExcelData[]) => void;
+  excelHeaders: string[];
+  setExcelHeaders: (headers: string[]) => void;
+  fileName: string;
+  setFileName: (name: string) => void;
+  columnMapping: ColumnMapping;
+  setColumnMapping: (mapping: ColumnMapping | ((prev: ColumnMapping) => ColumnMapping)) => void;
+  resetData: () => void;
+};

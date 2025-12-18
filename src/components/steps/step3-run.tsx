@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { ArrowLeft, Play, RefreshCw, Download, Info, Trash2, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Play, RefreshCw, Info, Trash2, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -24,7 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import type { ColumnMapping, ExcelData, ErrorDetail, RunJobInput, RunJobOutput } from '@/lib/types';
+import type { ExcelData, ErrorDetail, RunJobInput } from '@/lib/types';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { useToast } from '@/hooks/use-toast';
@@ -32,14 +32,7 @@ import { tableColumns, tableName } from '@/lib/schema';
 import { parse, isValid } from 'date-fns';
 import { runJob } from '@/ai/flows/run-job-flow';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-
-interface Step3RunProps {
-  fileName: string;
-  excelData: ExcelData[];
-  columnMapping: ColumnMapping;
-  onBack: () => void;
-  onNewJob: () => void;
-}
+import { useDataContext } from '@/context/data-context';
 
 type RunStatus = 'configuring' | 'validating' | 'running' | 'finished';
 type JobResult = {
@@ -53,30 +46,23 @@ type JobResult = {
 
 const VALIDATION_BATCH_SIZE = 500; 
 
-export function Step3Run({
-  fileName,
-  excelData,
-  columnMapping,
-  onBack,
-  onNewJob,
-}: Step3RunProps) {
+export function Step3Run() {
+  const { fileName, excelData, columnMapping, setStep, resetData } = useDataContext();
   const { toast } = useToast();
   const [status, setStatus] = useState<RunStatus>('configuring');
-  const [isDryRun, setIsDryRun] = useState(false);
   
-  // States for batch processing
   const [progress, setProgress] = useState(0);
   const [errorDetails, setErrorDetails] = useState<ErrorDetail[]>([]);
   const [validRows, setValidRows] = useState<ExcelData[]>([]);
   const [jobResult, setJobResult] = useState<JobResult | null>(null);
   const [dryRunCompleted, setDryRunCompleted] = useState(false);
+  const [isDryRun, setIsDryRun] = useState(false);
 
-  // Settings state
   const [duplicateStrategy, setDuplicateStrategy] = useState<'insert_only' | 'skip' | 'upsert'>('insert_only');
   const [strictMode, setStrictMode] = useState<'tolerant' | 'strict'>('tolerant');
   const [batchSize, setBatchSize] = useState('1000');
   const [deleteAll, setDeleteAll] = useState(false);
-  const [primaryKey, setPrimaryKey] = useState(''); // Needed for upsert/skip
+  const [primaryKey, setPrimaryKey] = useState('');
   
   const validateData = useCallback(async () => {
       setStatus('validating');
@@ -255,7 +241,6 @@ export function Step3Run({
 
   const handleDryRun = async () => {
     setIsDryRun(true);
-    setDryRunCompleted(false);
 
     if ( (duplicateStrategy === 'skip' || duplicateStrategy === 'upsert') && !primaryKey) {
         toast({
@@ -272,7 +257,7 @@ export function Step3Run({
 
     setJobResult({
         totalRows: excelData.length,
-        inserted: localValidRows.length, // Represents 'valid' in dry run
+        inserted: localValidRows.length,
         updated: 0,
         skipped: 0,
         errors: localErrors.length,
@@ -283,12 +268,10 @@ export function Step3Run({
     toast({ title: "Validation Complete", description: `Found ${localErrors.length} errors in ${excelData.length} rows.` });
   };
   
-  const handleDownload = (type: 'errors' | 'summary') => {
-      toast({
-          title: 'Function not implemented',
-          description: `The ${type} report download is a simulation.`,
-      });
-  };
+  const handleNewJob = () => {
+      resetData();
+      setStep(1);
+  }
 
   const renderContent = () => {
     switch (status) {
@@ -432,20 +415,14 @@ export function Step3Run({
         {renderContent()}
       </CardContent>
       <CardFooter className="flex justify-between">
-        <Button variant="outline" onClick={onBack} disabled={status === 'running' || status === 'validating'}>
+        <Button variant="outline" onClick={() => setStep(2)} disabled={status === 'running' || status === 'validating'}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
         
         {status === 'finished' ? (
              <div className="flex gap-2">
-                 {isDryRun && (
-                    <Button onClick={startJob} disabled={status === 'running' || status === 'validating' || validRows.length === 0} className="bg-green-600 text-white hover:bg-green-700">
-                      <CheckCircle className="mr-2 h-4 w-4" />
-                      Start Real Job
-                    </Button>
-                 )}
-                <Button onClick={onNewJob}>
+                <Button onClick={handleNewJob}>
                     <RefreshCw className="mr-2 h-4 w-4" />
                     Start New Job
                 </Button>
@@ -456,7 +433,7 @@ export function Step3Run({
                     {status === 'validating' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
                     Validate (Dry Run)
                 </Button>
-                <Button onClick={startJob} disabled={!dryRunCompleted || status === 'running' || status === 'validating'} className="bg-green-600 text-white hover:bg-green-700">
+                <Button onClick={startJob} disabled={!dryRunCompleted || status === 'running' || status === 'validating' || validRows.length === 0} className="bg-green-600 text-white hover:bg-green-700">
                     {status === 'running' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
                     Start Real Job
                 </Button>
@@ -466,5 +443,3 @@ export function Step3Run({
     </Card>
   );
 }
-
-    

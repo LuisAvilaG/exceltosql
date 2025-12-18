@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -35,34 +36,22 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { ArrowRight, ArrowLeft, Settings, Info, PlusCircle, X } from 'lucide-react';
 import { tableColumns } from '@/lib/schema';
-import type { ColumnMapping, SqlColumn } from '@/lib/types';
+import type { SqlColumn } from '@/lib/types';
 import { Badge } from '../ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
+import { useDataContext } from '@/context/data-context';
 
-interface Step2MappingProps {
-  excelHeaders: string[];
-  initialMapping: ColumnMapping;
-  onMappingComplete: (mapping: ColumnMapping) => void;
-  onBack: () => void;
-}
-
-export function Step2Mapping({
-  excelHeaders,
-  initialMapping,
-  onMappingComplete,
-  onBack,
-}: Step2MappingProps) {
-  const [mapping, setMapping] = useState<ColumnMapping>(initialMapping);
+export function Step2Mapping() {
+  const { excelHeaders, columnMapping, setColumnMapping, setStep } = useDataContext();
+  
   const [destinationColumns, setDestinationColumns] = useState<SqlColumn[]>([]);
   const [columnToAdd, setColumnToAdd] = useState('');
 
   useEffect(() => {
-    // Auto-map on first load and determine which columns to show
-    const autoMapping: ColumnMapping = {};
+    const autoMapping: { [key: string]: string | null } = {};
     const matchedSqlColumns = new Set<string>();
 
     tableColumns.forEach(sqlCol => {
-      // Find a matching excel header
       const similarHeader = excelHeaders.find(h => h.toLowerCase().replace(/[^a-z0-9]/gi, '') === sqlCol.name.toLowerCase().replace(/[^a-z0-9]/gi, ''));
       if (similarHeader) {
         autoMapping[sqlCol.name] = similarHeader;
@@ -70,30 +59,24 @@ export function Step2Mapping({
       }
     });
 
-    // Determine initial columns to display
     const initialCols = tableColumns.filter(col => {
       if (col.isIdentity) return false;
-      // Always include required columns
       if (col.isRequired) return true;
-      // Include if it was auto-mapped
       if (matchedSqlColumns.has(col.name)) return true;
-      
       return false;
     });
 
     setDestinationColumns(initialCols);
-    setMapping(prev => ({ ...autoMapping, ...prev }));
-
-  // We run this only once on mount to set the initial state.
+    setColumnMapping(prev => ({ ...autoMapping, ...prev }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [excelHeaders]);
   
   const handleMappingChange = (sqlColumn: string, excelColumn: string) => {
-    setMapping((prev) => ({ ...prev, [sqlColumn]: excelColumn === 'none' ? null : excelColumn }));
+    setColumnMapping((prev) => ({ ...prev, [sqlColumn]: excelColumn === 'none' ? null : excelColumn }));
   };
 
   const handleNext = () => {
-    onMappingComplete(mapping);
+    setStep(3);
   };
 
   const addColumn = () => {
@@ -109,7 +92,7 @@ export function Step2Mapping({
     const columnToRemove = tableColumns.find(c => c.name === columnName);
     if(columnToRemove && columnToRemove.isRequired) return; // Cannot remove required columns
     setDestinationColumns(prev => prev.filter(c => c.name !== columnName));
-    setMapping(prev => {
+    setColumnMapping(prev => {
         const newMapping = {...prev};
         delete newMapping[columnName];
         return newMapping;
@@ -161,7 +144,7 @@ export function Step2Mapping({
                   </TableCell>
                   <TableCell>
                     <Select
-                      value={mapping[col.name] || 'none'}
+                      value={columnMapping[col.name] || 'none'}
                       onValueChange={(value) => handleMappingChange(col.name, value)}
                     >
                       <SelectTrigger>
@@ -180,7 +163,7 @@ export function Step2Mapping({
                   <TableCell className="text-center">
                     <Popover>
                       <PopoverTrigger asChild>
-                        <Button variant="ghost" size="icon" disabled={!mapping[col.name]}>
+                        <Button variant="ghost" size="icon" disabled={!columnMapping[col.name]}>
                           <Settings className="h-4 w-4" />
                         </Button>
                       </PopoverTrigger>
@@ -191,7 +174,7 @@ export function Step2Mapping({
                               Transformations
                             </h4>
                             <p className="text-sm text-muted-foreground">
-                              Apply rules to the '{mapping[col.name]}' column.
+                              Apply rules to the '{columnMapping[col.name]}' column.
                             </p>
                           </div>
                           <div className="grid gap-2">
@@ -242,7 +225,7 @@ export function Step2Mapping({
         </div>
       </CardContent>
       <CardFooter className="flex justify-between">
-        <Button variant="outline" onClick={onBack}>
+        <Button variant="outline" onClick={() => setStep(1)}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back
         </Button>

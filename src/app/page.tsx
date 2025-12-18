@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -5,74 +6,21 @@ import { Header } from '@/components/layout/header';
 import { Step1Upload } from '@/components/steps/step1-upload';
 import { Step2Mapping } from '@/components/steps/step2-mapping';
 import { Step3Run } from '@/components/steps/step3-run';
-import type { ColumnMapping } from '@/lib/types';
+import { DataProvider, useDataContext } from '@/context/data-context';
 
-export type ExcelData = { [key: string]: string | number | null }[];
-
-export default function Home() {
-  const [step, setStep] = useState(1);
-  const [excelData, setExcelData] = useState<ExcelData>([]);
-  const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
-  const [fileName, setFileName] = useState('');
-  const [columnMapping, setColumnMapping] = useState<ColumnMapping>({});
-
-  const handleFileLoaded = (
-    data: ExcelData,
-    headers: string[],
-    name: string
-  ) => {
-    setExcelData(data);
-    setExcelHeaders(headers);
-    setFileName(name);
-    setColumnMapping({}); // Reset mapping when new file is loaded
-    setStep(2);
-  };
-
-  const handleMappingComplete = (
-    mapping: ColumnMapping
-  ) => {
-    setColumnMapping(mapping);
-    setStep(3);
-  };
-
-  const handleBackToMapping = () => {
-    setStep(2);
-  };
-
-  const handleNewJob = () => {
-    setStep(1);
-    // Reset all state for a new job
-    setExcelData([]);
-    setExcelHeaders([]);
-    setFileName('');
-    setColumnMapping({});
-  };
+function HomePage() {
+  const { step, setStep } = useDataContext();
 
   const renderStep = () => {
     switch (step) {
       case 1:
-        return <Step1Upload onFileLoaded={handleFileLoaded} />;
+        return <Step1Upload />;
       case 2:
-        return (
-          <Step2Mapping
-            excelHeaders={excelHeaders}
-            initialMapping={columnMapping}
-            onMappingComplete={handleMappingComplete}
-            onBack={() => setStep(1)}
-          />
-        );
+        return <Step2Mapping />;
       case 3:
-        return (
-          <Step3Run
-            fileName={fileName}
-            excelData={excelData}
-            columnMapping={columnMapping}
-            onBack={handleBackToMapping}
-            onNewJob={handleNewJob}
-          />
-        );
+        return <Step3Run />;
       default:
-        return <Step1Upload onFileLoaded={handleFileLoaded} />;
+        return <Step1Upload />;
     }
   };
 
@@ -86,4 +34,11 @@ export default function Home() {
   );
 }
 
-    
+
+export default function Home() {
+  return (
+    <DataProvider>
+      <HomePage />
+    </DataProvider>
+  )
+}
