@@ -107,7 +107,6 @@ export function Step3Run({
                   if (sqlCol.isRequired) {
                       localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue ?? 'NULL'), error: `Required value is missing.` });
                       rowHasError = true;
-                      continue;
                   } else {
                       if (sqlCol.name === 'MeraAreaId') {
                           parsedValue = null;
@@ -116,69 +115,67 @@ export function Step3Run({
                       } else {
                           parsedValue = null;
                       }
-                      transformedRow[sqlCol.name] = parsedValue;
-                      continue;
                   }
-                }
-                
-                switch(sqlCol.type) {
-                    case 'int':
-                        parsedValue = parseInt(String(rawValue), 10);
-                        if (isNaN(parsedValue)) {
-                            localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Must be a valid integer.' });
-                            rowHasError = true;
-                        }
-                        break;
-                    case 'decimal(38,0)':
-                    case 'decimal(10,0)':
-                        const cleanedValue = String(rawValue).replace(/[$,]/g, '');
-                        parsedValue = parseFloat(cleanedValue);
-                        if (isNaN(parsedValue)) {
-                            localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Must be a valid number.' });
-                            rowHasError = true;
-                        }
-                        break;
-                    case 'datetime':
-                        if (typeof rawValue === 'number') {
-                             const date = new Date(Math.round((rawValue - 25569) * 86400 * 1000));
-                             if (!isValid(date)) {
-                                localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Invalid Excel date serial number.' });
+                } else {
+                    switch(sqlCol.type) {
+                        case 'int':
+                            parsedValue = parseInt(String(rawValue), 10);
+                            if (isNaN(parsedValue)) {
+                                localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Must be a valid integer.' });
                                 rowHasError = true;
-                            } else {
-                                parsedValue = date.toISOString();
                             }
-                        } else {
-                            const dateStr = String(rawValue);
-                            const supportedFormats = ["yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd HH:mm:ss", 'yyyy-MM-dd', 'MM/dd/yyyy'];
-                            let parsedDate = null;
-                            const isoDate = new Date(dateStr);
-                            if (isValid(isoDate) && dateStr.includes('T')) {
-                                parsedDate = isoDate;
+                            break;
+                        case 'decimal(38,0)':
+                        case 'decimal(10,0)':
+                            const cleanedValue = String(rawValue).replace(/[$,]/g, '');
+                            parsedValue = parseFloat(cleanedValue);
+                            if (isNaN(parsedValue)) {
+                                localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Must be a valid number.' });
+                                rowHasError = true;
+                            }
+                            break;
+                        case 'datetime':
+                            if (typeof rawValue === 'number') {
+                                const date = new Date(Math.round((rawValue - 25569) * 86400 * 1000));
+                                if (!isValid(date)) {
+                                    localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Invalid Excel date serial number.' });
+                                    rowHasError = true;
+                                } else {
+                                    parsedValue = date.toISOString();
+                                }
                             } else {
-                                for(const format of supportedFormats) {
-                                    const d = parse(dateStr, format, new Date());
-                                    if (isValid(d)) {
-                                        parsedDate = d;
-                                        break;
+                                const dateStr = String(rawValue);
+                                const supportedFormats = ["yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd HH:mm:ss", 'yyyy-MM-dd', 'MM/dd/yyyy'];
+                                let parsedDate = null;
+                                const isoDate = new Date(dateStr);
+                                if (isValid(isoDate) && dateStr.includes('T')) {
+                                    parsedDate = isoDate;
+                                } else {
+                                    for(const format of supportedFormats) {
+                                        const d = parse(dateStr, format, new Date());
+                                        if (isValid(d)) {
+                                            parsedDate = d;
+                                            break;
+                                        }
                                     }
                                 }
+                                if (!parsedDate) {
+                                    localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: dateStr, error: 'Invalid or unsupported date format.' });
+                                    rowHasError = true;
+                                } else {
+                                    parsedValue = parsedDate.toISOString();
+                                }
                             }
-                            if (!parsedDate) {
-                                localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: dateStr, error: 'Invalid or unsupported date format.' });
+                            break;
+                        case 'varchar(100)':
+                            if (String(rawValue).length > 100) {
+                                localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: `"${String(rawValue).substring(0, 20)}..."`, error: 'Exceeds max length of 100 characters.' });
                                 rowHasError = true;
                             } else {
-                                parsedValue = parsedDate.toISOString();
+                                parsedValue = String(rawValue);
                             }
-                        }
-                        break;
-                    case 'varchar(100)':
-                        if (String(rawValue).length > 100) {
-                             localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: `"${String(rawValue).substring(0, 20)}..."`, error: 'Exceeds max length of 100 characters.' });
-                            rowHasError = true;
-                        } else {
-                            parsedValue = String(rawValue);
-                        }
-                        break;
+                            break;
+                    }
                 }
                 transformedRow[sqlCol.name] = parsedValue;
               }
@@ -469,3 +466,5 @@ export function Step3Run({
     </Card>
   );
 }
+
+    
