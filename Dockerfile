@@ -1,22 +1,23 @@
-# 1. Use an official Node.js runtime as a parent image
+# Use an official Node.js runtime as a parent image
 FROM node:20-slim
 
-# 2. Set the working directory in the container
+# Set the working directory in the container
 WORKDIR /app
 
-# 3. Copy package.json and install dependencies
-# We copy only package.json first to leverage Docker's cache.
-COPY package.json ./
+# Copy package.json and package-lock.json (if available)
+COPY package*.json ./
+
+# Install app dependencies
 RUN npm install
 
-# 4. Copy the rest of your application's code
+# Bundle app source
 COPY . .
 
-# 5. Build the Next.js application
+# Creates a Next.js production build
 RUN npm run build
 
-# 6. Expose the port the app runs on
+# Expose port 3000 to the outside world
 EXPOSE 3000
 
-# 7. Define the command to run your app
+# Command to run the app
 CMD ["npm", "start"]
