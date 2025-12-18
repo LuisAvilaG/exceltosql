@@ -5,7 +5,7 @@ import { Header } from '@/components/layout/header';
 import { Step1Upload } from '@/components/steps/step1-upload';
 import { Step2Mapping } from '@/components/steps/step2-mapping';
 import { Step3Run } from '@/components/steps/step3-run';
-import type { ColumnMapping, RunSettings } from '@/lib/types';
+import type { ColumnMapping } from '@/lib/types';
 
 export type ExcelData = { [key: string]: string | number | null }[];
 
@@ -15,7 +15,6 @@ export default function Home() {
   const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
   const [fileName, setFileName] = useState('');
   const [columnMapping, setColumnMapping] = useState<ColumnMapping>({});
-  const [runSettings, setRunSettings] = useState<RunSettings | null>(null);
 
   const handleFileLoaded = (
     data: ExcelData,
@@ -30,11 +29,9 @@ export default function Home() {
   };
 
   const handleMappingComplete = (
-    mapping: ColumnMapping,
-    settings: RunSettings
+    mapping: ColumnMapping
   ) => {
     setColumnMapping(mapping);
-    setRunSettings(settings);
     setStep(3);
   };
 
@@ -49,7 +46,6 @@ export default function Home() {
     setExcelHeaders([]);
     setFileName('');
     setColumnMapping({});
-    setRunSettings(null);
   };
 
   const renderStep = () => {
@@ -71,7 +67,6 @@ export default function Home() {
             fileName={fileName}
             excelData={excelData}
             columnMapping={columnMapping}
-            runSettings={runSettings!}
             onBack={handleBackToMapping}
             onNewJob={handleNewJob}
           />
@@ -90,3 +85,5 @@ export default function Home() {
     </div>
   );
 }
+
+    

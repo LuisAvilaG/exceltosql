@@ -35,14 +35,14 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { ArrowRight, ArrowLeft, Settings, Info, PlusCircle, X } from 'lucide-react';
 import { tableColumns } from '@/lib/schema';
-import type { ColumnMapping, RunSettings, SqlColumn } from '@/lib/types';
+import type { ColumnMapping, SqlColumn } from '@/lib/types';
 import { Badge } from '../ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 
 interface Step2MappingProps {
   excelHeaders: string[];
   initialMapping: ColumnMapping;
-  onMappingComplete: (mapping: ColumnMapping, settings: RunSettings) => void;
+  onMappingComplete: (mapping: ColumnMapping) => void;
   onBack: () => void;
 }
 
@@ -93,12 +93,7 @@ export function Step2Mapping({
   };
 
   const handleNext = () => {
-    const settings: RunSettings = {
-      duplicateStrategy: 'insert_only',
-      strictMode: true,
-      batchSize: 1000,
-    };
-    onMappingComplete(mapping, settings);
+    onMappingComplete(mapping);
   };
 
   const addColumn = () => {
@@ -252,10 +247,12 @@ export function Step2Mapping({
           Back
         </Button>
         <Button onClick={handleNext}>
-          Next: Run Job
+          Next: Configure & Run
           <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
       </CardFooter>
     </Card>
   );
 }
+
+    

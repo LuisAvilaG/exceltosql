@@ -440,7 +440,7 @@ export function Step3Run({
         {status === 'finished' ? (
              <div className="flex gap-2">
                  {isDryRun && (
-                    <Button onClick={startJob} disabled={status === 'running' || status === 'validating'} className="bg-green-600 text-white hover:bg-green-700">
+                    <Button onClick={startJob} disabled={status === 'running' || status === 'validating' || validRows.length === 0} className="bg-green-600 text-white hover:bg-green-700">
                       <CheckCircle className="mr-2 h-4 w-4" />
                       Start Real Job
                     </Button>
@@ -466,3 +466,5 @@ export function Step3Run({
     </Card>
   );
 }
+
+    
