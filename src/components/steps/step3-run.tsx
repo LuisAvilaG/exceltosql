@@ -193,6 +193,7 @@ export function Step3Run() {
       setStatus('running');
       setProgress(0);
       setIsDryRun(false);
+      setDryRunCompleted(false);
 
       const jobSettings: RunJobInput['settings'] = {
           tableName,
@@ -426,6 +427,12 @@ export function Step3Run() {
                     <RefreshCw className="mr-2 h-4 w-4" />
                     Start New Job
                 </Button>
+                {dryRunCompleted && (
+                  <Button onClick={startJob} disabled={!dryRunCompleted || status === 'running' || status === 'validating' || validRows.length === 0} className="bg-green-600 text-white hover:bg-green-700">
+                      {status === 'running' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                      Start Real Job
+                  </Button>
+                )}
             </div>
         ) : (
             <div className="flex gap-2">
@@ -433,8 +440,8 @@ export function Step3Run() {
                     {status === 'validating' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
                     Validate (Dry Run)
                 </Button>
-                <Button onClick={startJob} disabled={!dryRunCompleted || status === 'running' || status === 'validating' || validRows.length === 0} className="bg-green-600 text-white hover:bg-green-700">
-                    {status === 'running' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                <Button onClick={startJob} disabled={true} className="bg-green-600 text-white hover:bg-green-700">
+                    <CheckCircle className="mr-2 h-4 w-4" />
                     Start Real Job
                 </Button>
             </div>
@@ -443,3 +450,5 @@ export function Step3Run() {
     </Card>
   );
 }
+
+    
