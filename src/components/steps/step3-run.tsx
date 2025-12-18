@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Card,
   CardContent,
@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, ArrowLeft, Play, RefreshCw, Download, Info, Trash2 } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Play, RefreshCw, Download, Info, Trash2, Loader2 } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -27,7 +27,8 @@ import type { ColumnMapping, RunSettings, ExcelData } from '@/lib/types';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { tableColumns } from '@/lib/schema';
+import { validateData } from '@/ai/flows/validate-data-flow';
+import type { ValidateDataOutput } from '@/ai/flows/validate-data-flow';
 
 interface Step3RunProps {
   fileName: string;
@@ -39,13 +40,6 @@ interface Step3RunProps {
 }
 
 type RunStatus = 'idle' | 'running' | 'finished';
-type RunResults = {
-  total: number;
-  inserted: number;
-  skipped: number;
-  errors: number;
-  errorRows: any[];
-};
 
 export function Step3Run({
   fileName,
@@ -56,9 +50,7 @@ export function Step3Run({
 }: Step3RunProps) {
   const { toast } = useToast();
   const [status, setStatus] = useState<RunStatus>('idle');
-  const [progress, setProgress] = useState(0);
-  const [results, setResults] = useState<RunResults | null>(null);
-  const [eta, setEta] = useState('');
+  const [results, setResults] = useState<ValidateDataOutput | null>(null);
   const [isDryRun, setIsDryRun] = useState(false);
 
   // Settings state
@@ -67,91 +59,46 @@ export function Step3Run({
   const [batchSize, setBatchSize] = useState('1000');
   const [deleteAll, setDeleteAll] = useState(false);
 
-
-  const processDataForImport = () => {
-    const allSqlColumns = tableColumns.map(c => c.name);
-
-    return excelData.map(excelRow => {
-        const transformedRow: { [key: string]: any } = {};
-
-        allSqlColumns.forEach(sqlCol => {
-            const mappedExcelCol = columnMapping[sqlCol];
-            const columnSchema = tableColumns.find(c => c.name === sqlCol);
-
-            if (mappedExcelCol && excelRow.hasOwnProperty(mappedExcelCol) && excelRow[mappedExcelCol] !== null && excelRow[mappedExcelCol] !== '') {
-                transformedRow[sqlCol] = excelRow[mappedExcelCol];
-            } else {
-                // Handle default values for unmapped columns
-                if (sqlCol === 'MeraAreaId') {
-                    transformedRow[sqlCol] = null;
-                } else if (sqlCol !== 'Id') { // Don't default identity column
-                    if (columnSchema?.type.includes('decimal') || columnSchema?.type.includes('int')) {
-                       transformedRow[sqlCol] = 0;
-                    } else {
-                       transformedRow[sqlCol] = null;
-                    }
-                }
-            }
-        });
-        return transformedRow;
-    });
-  };
-
-
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    let startTime: number;
-
-    if (status === 'running') {
-      const processedData = processDataForImport();
-      if (deleteAll) {
-        console.log("Simulating: Deleting all previous data from the table.");
-      }
-      console.log('Simulating import with processed data:', processedData.slice(0, 5));
-
-      startTime = Date.now();
-      setProgress(0);
-      setEta('Calculating...');
-
-      interval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 100) {
-            clearInterval(interval);
-            setStatus('finished');
-            setResults({
-              total: excelData.length,
-              inserted: excelData.length - 2,
-              skipped: 0,
-              errors: 2,
-              errorRows: [
-                { row: 4, column: 'SalesDate', value: 'Invalid Date', error: 'Invalid date format' },
-                { row: 5, column: 'MeraLocationId', value: 'ABC', error: 'Must be an integer' }
-              ],
-            });
-            return 100;
-          }
-
-          const newProgress = prev + 5;
-          const elapsedTime = (Date.now() - startTime) / 1000;
-          const estimatedTotalTime = (elapsedTime / newProgress) * 100;
-          const remainingTime = Math.round(estimatedTotalTime - elapsedTime);
-          setEta(`${remainingTime}s remaining`);
-
-          return newProgress;
-        });
-      }, 500);
-    }
-    return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, excelData.length, deleteAll]);
-
-  const handleRun = (dryRun: boolean) => {
+  const handleRun = async (dryRun: boolean) => {
     setIsDryRun(dryRun);
     setStatus('running');
+    setResults(null);
     toast({
       title: dryRun ? 'Starting simulation...' : 'Starting job...',
-      description: `Processing file ${fileName}.`
+      description: `Validating ${excelData.length} rows from ${fileName}.`
     });
+
+    try {
+        const currentSettings: RunSettings = {
+            duplicateStrategy: duplicateStrategy as any,
+            strictMode: strictMode === 'strict',
+            batchSize: parseInt(batchSize, 10) || 1000,
+        };
+        const validationResult = await validateData({
+            excelData,
+            columnMapping,
+            settings: currentSettings,
+            isDryRun: dryRun,
+        });
+        setResults(validationResult);
+
+        if(dryRun) {
+            toast({
+                title: "Simulation Complete",
+                description: `Found ${validationResult.errors} potential errors.`,
+            });
+        }
+
+    } catch (error) {
+        console.error("Validation failed", error);
+        toast({
+            variant: "destructive",
+            title: "An Error Occurred",
+            description: error instanceof Error ? error.message : "Could not complete the run.",
+        });
+    } finally {
+        setStatus('finished');
+    }
   };
   
   const handleDownload = (type: 'errors' | 'summary') => {
@@ -166,30 +113,33 @@ export function Step3Run({
       <Card>
         <CardHeader>
           <CardTitle>
-            {status === 'running' ? (isDryRun ? 'Simulating Job...' : 'Running Job...') : (isDryRun ? 'Simulation Complete' : 'Job Complete')}
+            {status === 'running' 
+              ? (isDryRun ? 'Simulating Job...' : 'Running Job...') 
+              : (isDryRun ? 'Simulation Complete' : 'Job Complete')}
           </CardTitle>
           <CardDescription>
-            {status === 'running' ? `Processing ${excelData.length} rows from ${fileName}.` : `Results for ${fileName}.`}
+            {status === 'running' 
+              ? `Processing ${excelData.length} rows from ${fileName}. Please wait.` 
+              : `Results for ${fileName}.`}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Progress value={progress} />
-            <div className="flex justify-between text-sm text-muted-foreground">
-              <span>Progress: {Math.round(progress)}%</span>
-              {status === 'running' && <span>{eta}</span>}
+          {status === 'running' && (
+            <div className="flex flex-col items-center justify-center gap-4 p-8">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                <p className="text-muted-foreground">Analyzing data...</p>
             </div>
-          </div>
+          )}
           {status === 'finished' && results && (
             <div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center mb-6">
                     <div className="p-4 bg-secondary rounded-lg">
-                        <p className="text-2xl font-bold">{results.total}</p>
+                        <p className="text-2xl font-bold">{results.totalRows}</p>
                         <p className="text-sm text-muted-foreground">Total Rows</p>
                     </div>
                     <div className="p-4 bg-secondary rounded-lg">
-                        <p className="text-2xl font-bold text-green-600">{results.inserted}</p>
-                        <p className="text-sm text-muted-foreground">Inserted</p>
+                        <p className="text-2xl font-bold text-green-600">{results.validRows}</p>
+                        <p className="text-sm text-muted-foreground">{isDryRun ? 'Valid' : 'Inserted'}</p>
                     </div>
                     <div className="p-4 bg-secondary rounded-lg">
                         <p className="text-2xl font-bold text-yellow-600">{results.skipped}</p>
@@ -215,7 +165,7 @@ export function Step3Run({
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {results.errorRows.map((err, i) => (
+                                    {results.errorDetails.map((err, i) => (
                                         <TableRow key={i}>
                                             <TableCell>{err.row}</TableCell>
                                             <TableCell>{err.column}</TableCell>
@@ -237,10 +187,6 @@ export function Step3Run({
                     <Button variant="outline" onClick={() => handleDownload('errors')} disabled={!results?.errors}>
                         <Download className="mr-2 h-4 w-4" />
                         Download Errors (CSV)
-                    </Button>
-                    <Button variant="outline" onClick={() => handleDownload('summary')}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Download Summary
                     </Button>
                 </div>
             )}
@@ -329,3 +275,5 @@ export function Step3Run({
     </Card>
   );
 }
+
+    
