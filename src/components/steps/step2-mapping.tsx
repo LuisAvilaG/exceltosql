@@ -72,8 +72,9 @@ export function Step2Mapping({
 
     // Determine initial columns to display
     const initialCols = tableColumns.filter(col => {
+      if (col.isIdentity) return false;
       // Always include required columns
-      if (col.isRequired && !col.isIdentity) return true;
+      if (col.isRequired) return true;
       // Include if it was auto-mapped
       if (matchedSqlColumns.has(col.name)) return true;
       
@@ -85,7 +86,7 @@ export function Step2Mapping({
 
   // We run this only once on mount to set the initial state.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [excelHeaders]);
   
   const handleMappingChange = (sqlColumn: string, excelColumn: string) => {
     setMapping((prev) => ({ ...prev, [sqlColumn]: excelColumn === 'none' ? null : excelColumn }));
@@ -104,7 +105,7 @@ export function Step2Mapping({
     if (!columnToAdd) return;
     const column = tableColumns.find(c => c.name === columnToAdd);
     if (column && !destinationColumns.find(c => c.name === columnToAdd)) {
-      setDestinationColumns(prev => [...prev, column]);
+      setDestinationColumns(prev => [...prev, column].sort((a,b) => tableColumns.findIndex(c => c.name === a.name) - tableColumns.findIndex(c => c.name === b.name)));
     }
     setColumnToAdd('');
   };
