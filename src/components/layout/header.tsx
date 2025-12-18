@@ -10,36 +10,15 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetTrigger,
-} from '@/components/ui/sheet';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   Database,
   FileSpreadsheet,
   ArrowRight,
   TestTube2,
-  History,
   AlertCircle,
   CheckCircle2,
-  Download,
 } from 'lucide-react';
-import { mockJobHistory } from '@/lib/placeholder-data';
-import { useToast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
 import { testDbConnection } from '@/ai/flows/test-db-connection';
 
 export function Header() {
@@ -48,7 +27,6 @@ export function Header() {
     'idle' | 'testing' | 'success' | 'error'
   >('idle');
   const [errorMessage, setErrorMessage] = useState('');
-  const { toast } = useToast();
 
   const handleTestConnection = async () => {
     setTestStatus('testing');
@@ -65,13 +43,6 @@ export function Header() {
       setTestStatus('error');
       setErrorMessage(error instanceof Error ? error.message : String(error));
     }
-  };
-
-  const handleDownloadLogs = (jobId: string) => {
-    toast({
-      title: 'Function not implemented',
-      description: `Log download for job ${jobId} is a simulation.`,
-    });
   };
   
   const resetTestState = () => {
@@ -104,58 +75,6 @@ export function Header() {
             <TestTube2 className="mr-2 h-4 w-4" />
             Test Connection
           </Button>
-
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="outline" size="sm">
-                <History className="mr-2 h-4 w-4" />
-                Job History
-              </Button>
-            </SheetTrigger>
-            <SheetContent className="sm:max-w-3xl w-full">
-              <SheetHeader>
-                <SheetTitle>Job History</SheetTitle>
-                <SheetDescription>
-                  Review the status and results of previous jobs.
-                </SheetDescription>
-              </SheetHeader>
-              <div className="mt-4">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>File</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Result</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {mockJobHistory.map((job) => (
-                      <TableRow key={job.id}>
-                        <TableCell className="font-medium">
-                          {job.fileName}
-                        </TableCell>
-                        <TableCell>
-                          {format(job.date, 'MM/dd/yyyy HH:mm')}
-                        </TableCell>
-                        <TableCell>{job.result}</TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDownloadLogs(job.id)}
-                            aria-label="Download logs"
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </SheetContent>
-          </Sheet>
         </div>
       </div>
 

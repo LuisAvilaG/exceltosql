@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -31,7 +31,6 @@ import { useToast } from '@/hooks/use-toast';
 import { tableColumns, tableName } from '@/lib/schema';
 import { parse, isValid } from 'date-fns';
 import { runJob } from '@/ai/flows/run-job-flow';
-import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 interface Step3RunProps {
@@ -70,6 +69,7 @@ export function Step3Run({
   const [errorDetails, setErrorDetails] = useState<ErrorDetail[]>([]);
   const [validRows, setValidRows] = useState<ExcelData[]>([]);
   const [jobResult, setJobResult] = useState<JobResult | null>(null);
+  const [dryRunCompleted, setDryRunCompleted] = useState(false);
 
   // Settings state
   const [duplicateStrategy, setDuplicateStrategy] = useState<'insert_only' | 'skip' | 'upsert'>('insert_only');
@@ -96,35 +96,31 @@ export function Step3Run({
 
               const transformedRow: { [key: string]: any } = {};
               
-              // Iterate over all possible SQL columns, not just the mapped ones
               for (const sqlCol of tableColumns) {
                 if (sqlCol.isIdentity) continue;
 
                 const mappedExcelCol = columnMapping[sqlCol.name];
                 const rawValue = mappedExcelCol ? excelRow[mappedExcelCol] : undefined;
                 let parsedValue: any = rawValue;
-
-                // Handle unmapped or empty, non-required columns
-                if (!sqlCol.isRequired && (rawValue === undefined || rawValue === null || String(rawValue).trim() === '')) {
-                    if (sqlCol.name === 'MeraAreaId') {
-                        parsedValue = null;
-                    } else if (sqlCol.type.startsWith('decimal') || sqlCol.type === 'int') {
-                        parsedValue = 0;
-                    } else {
-                        parsedValue = null;
-                    }
-                    transformedRow[sqlCol.name] = parsedValue;
-                    continue; // Skip further validation for this column
-                }
-
-                // Check for required value missing
-                if (sqlCol.isRequired && (rawValue === undefined || rawValue === null || String(rawValue).trim() === '')) {
-                  localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue ?? 'NULL'), error: `Required value is missing.` });
-                  rowHasError = true;
-                  continue; // Go to next column
+                
+                if (rawValue === undefined || rawValue === null || String(rawValue).trim() === '') {
+                  if (sqlCol.isRequired) {
+                      localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue ?? 'NULL'), error: `Required value is missing.` });
+                      rowHasError = true;
+                      continue;
+                  } else {
+                      if (sqlCol.name === 'MeraAreaId') {
+                          parsedValue = null;
+                      } else if (sqlCol.type.startsWith('decimal') || sqlCol.type === 'int') {
+                          parsedValue = 0;
+                      } else {
+                          parsedValue = null;
+                      }
+                      transformedRow[sqlCol.name] = parsedValue;
+                      continue;
+                  }
                 }
                 
-                // Validate and parse based on type
                 switch(sqlCol.type) {
                     case 'int':
                         parsedValue = parseInt(String(rawValue), 10);
@@ -204,14 +200,31 @@ export function Step3Run({
   }, [excelData, columnMapping]);
 
 
-  const startJob = useCallback(async (validatedData: ExcelData[], settings: RunJobInput['settings']) => {
+  const startJob = useCallback(async () => {
+      if (validRows.length === 0) {
+          toast({ variant: "destructive", title: "No Valid Data", description: "There are no valid rows to process." });
+          setStatus('finished');
+          return;
+      }
+      
       setStatus('running');
       setProgress(0);
+      setIsDryRun(false);
+
+      const jobSettings: RunJobInput['settings'] = {
+          tableName,
+          columnMapping,
+          duplicateStrategy,
+          strictMode: strictMode as 'tolerant' | 'strict',
+          batchSize: parseInt(batchSize, 10) || 1000,
+          deleteAll,
+          primaryKey: (duplicateStrategy === 'skip' || duplicateStrategy === 'upsert') ? primaryKey : undefined,
+      };
 
       try {
-        const result = await runJob({ data: validatedData, settings });
+        const result = await runJob({ data: validRows, settings: jobSettings });
         setJobResult({
-            totalRows: validatedData.length,
+            totalRows: validRows.length,
             inserted: result.inserted,
             updated: result.updated,
             skipped: result.skipped,
@@ -224,11 +237,11 @@ export function Step3Run({
         });
       } catch (e: any) {
         setJobResult({
-            totalRows: validatedData.length,
+            totalRows: validRows.length,
             inserted: 0,
             updated: 0,
             skipped: 0,
-            errors: validatedData.length,
+            errors: validRows.length,
             errorDetails: [{ row: 0, column: 'Job', value: 'N/A', error: e.message || 'An unknown server error occurred.' }],
         });
          toast({
@@ -240,11 +253,12 @@ export function Step3Run({
         setStatus('finished');
       }
 
-  }, [toast]);
+  }, [validRows, toast, tableName, columnMapping, duplicateStrategy, strictMode, batchSize, deleteAll, primaryKey]);
 
 
-  const handleRun = async (dryRun: boolean) => {
-    setIsDryRun(dryRun);
+  const handleDryRun = async () => {
+    setIsDryRun(true);
+    setDryRunCompleted(false);
 
     if ( (duplicateStrategy === 'skip' || duplicateStrategy === 'upsert') && !primaryKey) {
         toast({
@@ -259,43 +273,17 @@ export function Step3Run({
     
     const { localErrors, localValidRows } = await validateData();
 
-    if (dryRun) {
-        // DRY RUN
-        setJobResult({
-            totalRows: excelData.length,
-            inserted: localValidRows.length, // Represents 'valid' in dry run
-            updated: 0,
-            skipped: 0,
-            errors: localErrors.length,
-            errorDetails: localErrors,
-        });
-        setStatus('finished');
-        toast({ title: "Validation Complete", description: `Found ${localErrors.length} errors in ${excelData.length} rows.` });
-    } else {
-        // REAL JOB
-        if (strictMode === 'strict' && localErrors.length > 0) {
-            setJobResult({
-                totalRows: excelData.length,
-                inserted: 0, updated: 0, skipped: 0, errors: localErrors.length,
-                errorDetails: localErrors,
-            });
-            setStatus('finished');
-            toast({ variant: "destructive", title: "Job Halted", description: `Strict mode is enabled and ${localErrors.length} errors were found. No data was inserted.` });
-            return;
-        }
-
-        const jobSettings: RunJobInput['settings'] = {
-            tableName,
-            columnMapping,
-            duplicateStrategy,
-            strictMode: strictMode as 'tolerant' | 'strict',
-            batchSize: parseInt(batchSize, 10) || 1000,
-            deleteAll,
-            primaryKey: (duplicateStrategy === 'skip' || duplicateStrategy === 'upsert') ? primaryKey : undefined,
-        };
-        
-        await startJob(localValidRows, jobSettings);
-    }
+    setJobResult({
+        totalRows: excelData.length,
+        inserted: localValidRows.length, // Represents 'valid' in dry run
+        updated: 0,
+        skipped: 0,
+        errors: localErrors.length,
+        errorDetails: localErrors,
+    });
+    setStatus('finished');
+    setDryRunCompleted(true);
+    toast({ title: "Validation Complete", description: `Found ${localErrors.length} errors in ${excelData.length} rows.` });
   };
   
   const handleDownload = (type: 'errors' | 'summary') => {
@@ -329,7 +317,7 @@ export function Step3Run({
               </div>
               <div className="p-4 bg-secondary rounded-lg">
                 <p className="text-2xl font-bold text-green-600">{jobResult.inserted}</p>
-                <p className="text-sm text-muted-foreground">{isDryRun ? 'Valid' : 'Inserted'}</p>
+                <p className="text-sm text-muted-foreground">{isDryRun ? 'Valid Rows' : 'Inserted'}</p>
               </div>
                <div className="p-4 bg-secondary rounded-lg">
                 <p className="text-2xl font-bold text-blue-600">{jobResult.updated}</p>
@@ -422,8 +410,8 @@ export function Step3Run({
  const getTitle = () => {
     switch (status) {
         case 'validating': return 'Validating Data...';
-        case 'running': return isDryRun ? 'Simulating Job...' : 'Running Job...';
-        case 'finished': return isDryRun ? 'Simulation Complete' : 'Job Complete';
+        case 'running': return 'Running Job...';
+        case 'finished': return isDryRun ? 'Validation Complete' : 'Job Complete';
         default: return 'Configuration and Execution';
     }
  };
@@ -454,10 +442,12 @@ export function Step3Run({
         
         {status === 'finished' ? (
              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => handleDownload('errors')} disabled={!jobResult?.errors}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Download Errors (CSV)
-                </Button>
+                 {isDryRun && (
+                    <Button onClick={startJob} disabled={status === 'running' || status === 'validating'} className="bg-green-600 text-white hover:bg-green-700">
+                      <CheckCircle className="mr-2 h-4 w-4" />
+                      Start Real Job
+                    </Button>
+                 )}
                 <Button onClick={onNewJob}>
                     <RefreshCw className="mr-2 h-4 w-4" />
                     Start New Job
@@ -465,12 +455,12 @@ export function Step3Run({
             </div>
         ) : (
             <div className="flex gap-2">
-                <Button variant="outline" onClick={() => handleRun(true)} disabled={status === 'running' || status === 'validating'}>
-                    {(status === 'validating' && isDryRun) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-                    Dry Run
+                <Button variant="outline" onClick={handleDryRun} disabled={status === 'running' || status === 'validating'}>
+                    {status === 'validating' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                    Validate (Dry Run)
                 </Button>
-                <Button onClick={() => handleRun(false)} disabled={status === 'running' || status === 'validating'} className="bg-green-600 text-white hover:bg-green-700">
-                    {(status === 'running' || (status === 'validating' && !isDryRun)) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                <Button onClick={startJob} disabled={!dryRunCompleted || status === 'running' || status === 'validating'} className="bg-green-600 text-white hover:bg-green-700">
+                    {status === 'running' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
                     Start Real Job
                 </Button>
             </div>
@@ -479,5 +469,3 @@ export function Step3Run({
     </Card>
   );
 }
-
-    
