@@ -195,37 +195,71 @@ export function Step3Run() {
       setIsDryRun(false);
       setDryRunCompleted(false);
 
-      const jobSettings: RunJobInput['settings'] = {
-          tableName,
-          columnMapping,
-          duplicateStrategy,
-          strictMode: strictMode as 'tolerant' | 'strict',
-          batchSize: parseInt(batchSize, 10) || 1000,
-          deleteAll,
-          primaryKey: (duplicateStrategy === 'skip' || duplicateStrategy === 'upsert') ? primaryKey : undefined,
-      };
+      const jobBatchSize = parseInt(batchSize, 10) || 1000;
+      const numBatches = Math.ceil(validRows.length / jobBatchSize);
+      
+      let totalInserted = 0;
+      let totalUpdated = 0;
+      let totalSkipped = 0;
+      let totalErrorCount = 0;
+      let allJobErrors: ErrorDetail[] = [];
 
       try {
-        const result = await runJob({ data: validRows, settings: jobSettings });
+        for (let i = 0; i < numBatches; i++) {
+          const batchStart = i * jobBatchSize;
+          const batchEnd = batchStart + jobBatchSize;
+          const currentBatch = validRows.slice(batchStart, batchEnd);
+
+          const jobSettings: RunJobInput['settings'] = {
+              tableName,
+              columnMapping,
+              duplicateStrategy,
+              strictMode: strictMode as 'tolerant' | 'strict',
+              batchSize: currentBatch.length,
+              // Only send deleteAll on the first batch
+              deleteAll: i === 0 ? deleteAll : false,
+              primaryKey: (duplicateStrategy === 'skip' || duplicateStrategy === 'upsert') ? primaryKey : undefined,
+          };
+        
+          const result = await runJob({ data: currentBatch, settings: jobSettings });
+
+          totalInserted += result.inserted;
+          totalUpdated += result.updated;
+          totalSkipped += result.skipped;
+          totalErrorCount += result.errorCount;
+          if (result.errorDetails) {
+            allJobErrors = [...allJobErrors, ...result.errorDetails];
+          }
+
+          setProgress(Math.round(((i + 1) / numBatches) * 100));
+
+          if (!result.success && strictMode === 'strict') {
+             toast({ variant: "destructive", title: "Strict Mode Error", description: "Job aborted due to an error in a batch." });
+             break; // Abort on strict mode failure
+          }
+        }
+        
         setJobResult({
             totalRows: validRows.length,
-            inserted: result.inserted,
-            updated: result.updated,
-            skipped: result.skipped,
-            errors: result.errorCount,
-            errorDetails: result.errorDetails || [],
+            inserted: totalInserted,
+            updated: totalUpdated,
+            skipped: totalSkipped,
+            errors: totalErrorCount,
+            errorDetails: allJobErrors,
         });
+
         toast({
             title: "Job Complete",
-            description: `Inserted: ${result.inserted}, Updated: ${result.updated}, Errors: ${result.errorCount}`,
+            description: `Inserted: ${totalInserted}, Updated: ${totalUpdated}, Errors: ${totalErrorCount}`,
         });
+
       } catch (e: any) {
         setJobResult({
             totalRows: validRows.length,
-            inserted: 0,
-            updated: 0,
-            skipped: 0,
-            errors: validRows.length,
+            inserted: totalInserted,
+            updated: totalUpdated,
+            skipped: totalSkipped,
+            errors: validRows.length - totalInserted - totalUpdated,
             errorDetails: [{ row: 0, column: 'Job', value: 'N/A', error: e.message || 'An unknown server error occurred.' }],
         });
          toast({
@@ -440,7 +474,7 @@ export function Step3Run() {
                     {status === 'validating' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
                     Validate (Dry Run)
                 </Button>
-                <Button onClick={startJob} disabled={true} className="bg-green-600 text-white hover:bg-green-700">
+                 <Button onClick={startJob} disabled={true} className="bg-gray-400 text-white" title="Complete a Dry Run first">
                     <CheckCircle className="mr-2 h-4 w-4" />
                     Start Real Job
                 </Button>

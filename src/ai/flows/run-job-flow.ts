@@ -1,25 +1,36 @@
+
 'use server';
 import { ai } from '@/ai/genkit';
 import * as sql from 'mssql';
 import { tableColumns } from '@/lib/schema';
 import { RunJobInputSchema, RunJobOutputSchema, RunJobInput, RunJobOutput } from '@/lib/types';
 
-const config: sql.config = {
-  user: process.env.SQL_USER,
-  password: process.env.SQL_PASSWORD,
-  server: process.env.SQL_HOST || 'localhost',
-  database: process.env.SQL_DATABASE,
-  port: Number(process.env.SQL_PORT) || 1433,
-  options: {
-    encrypt: process.env.SQL_ENCRYPT === 'true',
-    trustServerCertificate: process.env.SQL_TRUST_SERVER_CERTIFICATE === 'true',
-  },
-   pool: {
-    max: 10,
-    min: 0,
-    idleTimeoutMillis: 30000
-  },
-};
+// Let SQL driver manage the connection pool
+let pool: sql.ConnectionPool | null = null;
+
+async function getPool(): Promise<sql.ConnectionPool> {
+    if (pool) {
+        return pool;
+    }
+    const config: sql.config = {
+      user: process.env.SQL_USER,
+      password: process.env.SQL_PASSWORD,
+      server: process.env.SQL_HOST || 'localhost',
+      database: process.env.SQL_DATABASE,
+      port: Number(process.env.SQL_PORT) || 1433,
+      options: {
+        encrypt: process.env.SQL_ENCRYPT === 'true',
+        trustServerCertificate: process.env.SQL_TRUST_SERVER_CERTIFICATE === 'true',
+      },
+      pool: {
+        max: 10,
+        min: 0,
+        idleTimeoutMillis: 30000
+      },
+    };
+    pool = await new sql.ConnectionPool(config).connect();
+    return pool;
+}
 
 // Simplified SQL type getter
 function getSqlType(typeName: string): any {
@@ -41,7 +52,6 @@ const runJobFlow = ai.defineFlow(
     outputSchema: RunJobOutputSchema,
   },
   async ({ data, settings }) => {
-    let pool: sql.ConnectionPool | null = null;
     let totalInserted = 0;
     let totalUpdated = 0;
     let totalSkipped = 0;
@@ -49,7 +59,7 @@ const runJobFlow = ai.defineFlow(
     const allErrorDetails: any[] = [];
 
     try {
-      pool = await sql.connect(config);
+      const pool = await getPool();
 
       if (settings.deleteAll) {
         const deleteRequest = new sql.Request(pool);
@@ -57,70 +67,65 @@ const runJobFlow = ai.defineFlow(
       }
 
       const mappedCols = tableColumns.filter(c => !c.isIdentity && settings.columnMapping[c.name]);
-      const batchSize = settings.batchSize > 0 ? settings.batchSize : data.length;
+      const transaction = new sql.Transaction(pool);
+      await transaction.begin();
 
-      for (let i = 0; i < data.length; i += batchSize) {
-          const chunk = data.slice(i, i + batchSize);
-          const transaction = new sql.Transaction(pool);
-          await transaction.begin();
+      try {
+        if (settings.duplicateStrategy === 'insert_only' && data.length > 0) {
+            const table = new sql.Table(settings.tableName);
+            table.create = false;
 
-          try {
-            if (settings.duplicateStrategy === 'insert_only' && chunk.length > 0) {
-                const table = new sql.Table(settings.tableName);
-                table.create = false;
-
-                mappedCols.forEach(col => {
-                    const sqlType = getSqlType(col.type);
-                    if (sqlType) {
-                        table.columns.add(col.name, sqlType, { nullable: true });
+            mappedCols.forEach(col => {
+                const sqlType = getSqlType(col.type);
+                if (sqlType) {
+                    table.columns.add(col.name, sqlType, { nullable: true });
+                }
+            });
+            
+            data.forEach(row => {
+                const values = mappedCols.map(col => {
+                    let val = row[col.name];
+                     if (col.type === 'datetime' && typeof val === 'string') {
+                        return new Date(val);
                     }
+                    return val;
+                });
+                table.rows.add(...values);
+            });
+
+            const bulkRequest = new sql.Request(transaction);
+            const result = await bulkRequest.bulk(table);
+            totalInserted += result.rowsAffected;
+        } else {
+           // Fallback for row-by-row strategies (skip/upsert)
+           // This logic remains to be implemented fully for those strategies.
+           // For now, it will act like a slower insert.
+           for (const row of data) {
+             try {
+                const columns = mappedCols.map(c => `[${c.name}]`).join(', ');
+                const values = mappedCols.map((c, idx) => `@param${idx}`).join(', ');
+                let query = `INSERT INTO ${settings.tableName} (${columns}) VALUES (${values});`;
+                
+                const rowRequest = new sql.Request(transaction);
+                mappedCols.forEach((col, idx) => {
+                    const val = row[col.name];
+                    rowRequest.input(`param${idx}`, val);
                 });
                 
-                chunk.forEach(row => {
-                    const values = mappedCols.map(col => {
-                        let val = row[col.name];
-                         if (col.type === 'datetime' && typeof val === 'string') {
-                            return new Date(val);
-                        }
-                        return val;
-                    });
-                    table.rows.add(...values);
-                });
-
-                const bulkRequest = new sql.Request(transaction);
-                const result = await bulkRequest.bulk(table);
-                totalInserted += result.rowsAffected;
-            } else {
-               // Fallback for row-by-row strategies (skip/upsert)
-               // This logic remains to be implemented fully for those strategies.
-               // For now, it will act like a slower insert.
-               for (const row of chunk) {
-                 try {
-                    const columns = mappedCols.map(c => `[${c.name}]`).join(', ');
-                    const values = mappedCols.map((c, idx) => `@param${idx}`).join(', ');
-                    let query = `INSERT INTO ${settings.tableName} (${columns}) VALUES (${values});`;
-                    
-                    const rowRequest = new sql.Request(transaction);
-                    mappedCols.forEach((col, idx) => {
-                        const val = row[col.name];
-                        rowRequest.input(`param${idx}`, val);
-                    });
-                    
-                    await rowRequest.query(query);
-                    totalInserted++;
-                 } catch (rowErr: any) {
-                    totalErrorCount++;
-                    if (settings.strictMode === 'strict') throw rowErr;
-                 }
-              }
-            }
-            await transaction.commit();
-          } catch(err) {
-              await transaction.rollback();
-              totalErrorCount += chunk.length; 
-              allErrorDetails.push({ row: i, column: 'Batch', value: 'N/A', error: (err as Error).message });
-              if (settings.strictMode === 'strict') throw err;
+                await rowRequest.query(query);
+                totalInserted++;
+             } catch (rowErr: any) {
+                totalErrorCount++;
+                if (settings.strictMode === 'strict') throw rowErr;
+             }
           }
+        }
+        await transaction.commit();
+      } catch(err) {
+          await transaction.rollback();
+          totalErrorCount += data.length; 
+          allErrorDetails.push({ row: 0, column: 'Batch', value: 'N/A', error: (err as Error).message });
+          if (settings.strictMode === 'strict') throw err;
       }
 
       return { success: true, inserted: totalInserted, updated: totalUpdated, skipped: totalSkipped, errorCount: totalErrorCount, errorDetails: allErrorDetails };
@@ -132,10 +137,6 @@ const runJobFlow = ai.defineFlow(
         errorCount: data.length - totalInserted,
         errorDetails: [{ row: 0, column: 'Global', value: 'N/A', error: err.message }]
       };
-    } finally {
-        if (pool) {
-            await pool.close();
-        }
     }
   }
 );
@@ -143,3 +144,5 @@ const runJobFlow = ai.defineFlow(
 export async function runJob(input: RunJobInput): Promise<RunJobOutput> {
   return await runJobFlow(input);
 }
+
+    
