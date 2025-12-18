@@ -34,7 +34,6 @@ function getSqlType(typeName: string): any {
     return key ? typeMap[key] : null;
 }
 
-
 const runJobFlow = ai.defineFlow(
   {
     name: 'runJobFlow',
@@ -43,16 +42,14 @@ const runJobFlow = ai.defineFlow(
   },
   async ({ data, settings }) => {
     let pool: sql.ConnectionPool | null = null;
-    let transaction: sql.Transaction | null = null;
-
-    let insertedCount = 0;
-    let updatedCount = 0;
-    let skippedCount = 0;
-    let errorCount = 0;
+    let totalInserted = 0;
+    let totalUpdated = 0;
+    let totalSkipped = 0;
+    let totalErrorCount = 0;
+    const allErrorDetails: any[] = [];
 
     try {
       pool = await sql.connect(config);
-      
 
       if (settings.deleteAll) {
         const deleteRequest = new sql.Request(pool);
@@ -60,81 +57,80 @@ const runJobFlow = ai.defineFlow(
       }
 
       const mappedCols = tableColumns.filter(c => !c.isIdentity && settings.columnMapping[c.name]);
-      
-      // For insert_only, we can use a much faster bulk insert
-      if (settings.duplicateStrategy === 'insert_only' && data.length > 0) {
-          const table = new sql.Table(settings.tableName);
-          table.create = false; // We're not creating the table
-          
-          // Add column definitions to the TVP
-          mappedCols.forEach(col => {
-              const sqlType = getSqlType(col.type);
-              if (sqlType) {
-                  table.columns.add(col.name, sqlType);
+      const batchSize = settings.batchSize > 0 ? settings.batchSize : data.length;
+
+      for (let i = 0; i < data.length; i += batchSize) {
+          const chunk = data.slice(i, i + batchSize);
+          const transaction = new sql.Transaction(pool);
+          await transaction.begin();
+
+          try {
+            if (settings.duplicateStrategy === 'insert_only' && chunk.length > 0) {
+                const table = new sql.Table(settings.tableName);
+                table.create = false;
+
+                mappedCols.forEach(col => {
+                    const sqlType = getSqlType(col.type);
+                    if (sqlType) {
+                        table.columns.add(col.name, sqlType, { nullable: true });
+                    }
+                });
+                
+                chunk.forEach(row => {
+                    const values = mappedCols.map(col => {
+                        let val = row[col.name];
+                         if (col.type === 'datetime' && typeof val === 'string') {
+                            return new Date(val);
+                        }
+                        return val;
+                    });
+                    table.rows.add(...values);
+                });
+
+                const bulkRequest = new sql.Request(transaction);
+                const result = await bulkRequest.bulk(table);
+                totalInserted += result.rowsAffected;
+            } else {
+               // Fallback for row-by-row strategies (skip/upsert)
+               // This logic remains to be implemented fully for those strategies.
+               // For now, it will act like a slower insert.
+               for (const row of chunk) {
+                 try {
+                    const columns = mappedCols.map(c => `[${c.name}]`).join(', ');
+                    const values = mappedCols.map((c, idx) => `@param${idx}`).join(', ');
+                    let query = `INSERT INTO ${settings.tableName} (${columns}) VALUES (${values});`;
+                    
+                    const rowRequest = new sql.Request(transaction);
+                    mappedCols.forEach((col, idx) => {
+                        const val = row[col.name];
+                        rowRequest.input(`param${idx}`, val);
+                    });
+                    
+                    await rowRequest.query(query);
+                    totalInserted++;
+                 } catch (rowErr: any) {
+                    totalErrorCount++;
+                    if (settings.strictMode === 'strict') throw rowErr;
+                 }
               }
-          });
-
-          // Add rows
-          data.forEach(row => {
-              const values = mappedCols.map(col => {
-                  let val = row[col.name];
-                  // Handle potential type issues from JSON
-                  if (col.type === 'datetime' && typeof val === 'string') {
-                      return new Date(val);
-                  }
-                  // mssql bulk can handle nulls and other primitives directly
-                  return val;
-              });
-              table.rows.add(...values);
-          });
-          
-          const bulkRequest = new sql.Request(pool);
-          const result = await bulkRequest.bulk(table);
-          insertedCount += result.rowsAffected;
-
-      } else {
-        // Fallback or other strategies (skip/upsert)
-        // This will be slower.
-        transaction = new sql.Transaction(pool);
-        await transaction.begin();
-
-        for (const row of data) {
-           try {
-              // TODO: Implement row-by-row upsert/skip logic
-              // For this example, we'll just simulate it as an insert.
-              
-              const columns = mappedCols.map(c => `[${c.name}]`).join(', ');
-              const values = mappedCols.map((c, i) => `@param${i}`).join(', ');
-              let query = `INSERT INTO ${settings.tableName} (${columns}) VALUES (${values});`;
-              
-              const rowRequest = new sql.Request(transaction);
-              mappedCols.forEach((col, i) => {
-                  const val = row[col.name];
-                  rowRequest.input(`param${i}`, val);
-              });
-              
-              await rowRequest.query(query);
-              insertedCount++;
-
-           } catch (rowErr: any) {
-              errorCount++;
-              if (settings.strictMode === 'strict') throw rowErr;
-           }
-        }
-
-        await transaction.commit();
+            }
+            await transaction.commit();
+          } catch(err) {
+              await transaction.rollback();
+              totalErrorCount += chunk.length; 
+              allErrorDetails.push({ row: i, column: 'Batch', value: 'N/A', error: (err as Error).message });
+              if (settings.strictMode === 'strict') throw err;
+          }
       }
-      
-      return { success: true, inserted: insertedCount, updated: updatedCount, skipped: skippedCount, errorCount: errorCount };
+
+      return { success: true, inserted: totalInserted, updated: totalUpdated, skipped: totalSkipped, errorCount: totalErrorCount, errorDetails: allErrorDetails };
+
     } catch (err: any) {
-      if (transaction && !transaction.rolledBack) {
-        await transaction.rollback();
-      }
-      return { 
-        success: false, 
-        inserted: insertedCount, updated: updatedCount, skipped: skippedCount, 
-        errorCount: data.length - insertedCount,
-        errorDetails: [{ row: 0, column: 'Transaction', value: 'N/A', error: err.message }]
+      return {
+        success: false,
+        inserted: totalInserted, updated: totalUpdated, skipped: totalSkipped,
+        errorCount: data.length - totalInserted,
+        errorDetails: [{ row: 0, column: 'Global', value: 'N/A', error: err.message }]
       };
     } finally {
         if (pool) {
