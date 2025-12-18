@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -14,7 +14,6 @@ import { ArrowRight, ArrowLeft, Play, RefreshCw, Download, Info, Trash2, Loader2
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Progress } from '@/components/ui/progress';
 import {
   Table,
   TableBody,
@@ -27,8 +26,9 @@ import type { ColumnMapping, RunSettings, ExcelData } from '@/lib/types';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { validateData } from '@/ai/flows/validate-data-flow';
 import type { ValidateDataOutput } from '@/ai/flows/validate-data-flow';
+import { validateData } from '@/ai/flows/validate-data-flow';
+
 
 interface Step3RunProps {
   fileName: string;
@@ -74,6 +74,8 @@ export function Step3Run({
             strictMode: strictMode === 'strict',
             batchSize: parseInt(batchSize, 10) || 1000,
         };
+        // The validateData function is now a server action, so this call will
+        // execute on the server, not the client, preventing UI freeze.
         const validationResult = await validateData({
             excelData,
             columnMapping,
@@ -85,7 +87,7 @@ export function Step3Run({
         if(dryRun) {
             toast({
                 title: "Simulation Complete",
-                description: `Found ${validationResult.errors} potential errors.`,
+                description: `Found ${validationResult.errors} potential errors in ${validationResult.errorDetails.length} rows.`,
             });
         }
 
@@ -119,7 +121,7 @@ export function Step3Run({
           </CardTitle>
           <CardDescription>
             {status === 'running' 
-              ? `Processing ${excelData.length} rows from ${fileName}. Please wait.` 
+              ? `Processing ${excelData.length} rows from ${fileName}. This may take a moment.` 
               : `Results for ${fileName}.`}
           </CardDescription>
         </CardHeader>
@@ -127,7 +129,8 @@ export function Step3Run({
           {status === 'running' && (
             <div className="flex flex-col items-center justify-center gap-4 p-8">
                 <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                <p className="text-muted-foreground">Analyzing data...</p>
+                <p className="text-muted-foreground">Analyzing data on the server...</p>
+                 <p className="text-sm text-muted-foreground">The UI will not freeze.</p>
             </div>
           )}
           {status === 'finished' && results && (
@@ -147,13 +150,13 @@ export function Step3Run({
                     </div>
                     <div className="p-4 bg-secondary rounded-lg">
                         <p className="text-2xl font-bold text-destructive">{results.errors}</p>
-                        <p className="text-sm text-muted-foreground">Errors</p>
+                        <p className="text-sm text-muted-foreground">Rows with Errors</p>
                     </div>
                 </div>
 
                 {results.errors > 0 && (
                     <div>
-                        <h3 className="font-semibold mb-2">Error Details</h3>
+                        <h3 className="font-semibold mb-2">Error Details (first 100 shown)</h3>
                         <div className="h-60 overflow-auto border rounded-lg">
                             <Table>
                                 <TableHeader>
@@ -165,11 +168,11 @@ export function Step3Run({
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {results.errorDetails.map((err, i) => (
+                                    {results.errorDetails.slice(0, 100).map((err, i) => (
                                         <TableRow key={i}>
                                             <TableCell>{err.row}</TableCell>
                                             <TableCell>{err.column}</TableCell>
-                                            <TableCell><Badge variant="destructive">{String(err.value)}</Badge></TableCell>
+                                            <TableCell><Badge variant="destructive" className="max-w-xs truncate">{String(err.value)}</Badge></TableCell>
                                             <TableCell>{err.error}</TableCell>
                                         </TableRow>
                                     ))}
@@ -262,12 +265,12 @@ export function Step3Run({
           Back
         </Button>
         <div className="flex gap-2">
-            <Button variant="outline" onClick={() => handleRun(true)}>
-                <Play className="mr-2 h-4 w-4" />
+            <Button variant="outline" onClick={() => handleRun(true)} disabled={status === 'running'}>
+               {status === 'running' && isDryRun ? <Loader2 className="animate-spin" /> : <Play />}
                 Dry Run
             </Button>
-            <Button onClick={() => handleRun(false)} className="bg-accent text-accent-foreground hover:bg-accent/90">
-                <ArrowRight className="mr-2 h-4 w-4" />
+            <Button onClick={() => handleRun(false)} disabled={status === 'running'} className="bg-accent text-accent-foreground hover:bg-accent/90">
+                {status === 'running' && !isDryRun ? <Loader2 className="animate-spin" /> : <ArrowRight />}
                 Start Job
             </Button>
         </div>

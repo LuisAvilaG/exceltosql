@@ -11,7 +11,7 @@ import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import type { ExcelData, ColumnMapping, RunSettings } from '@/lib/types';
 import { tableColumns } from '@/lib/schema';
-import { parse } from 'date-fns';
+import { parse, isValid } from 'date-fns';
 
 // Input schema
 const ValidateDataInputSchema = z.object({
@@ -59,15 +59,22 @@ const validateDataFlow = ai.defineFlow(
       let rowHasError = false;
       const excelRowNumber = index + 2; // Excel rows are 1-based, plus header
 
-      // Iterate over all possible SQL columns defined in the schema
-      for (const sqlCol of tableColumns) {
-        if (sqlCol.isIdentity) continue; // Skip identity columns like 'Id'
+      // Create a transformed row for validation
+      const transformedRow: { [key: string]: any } = {};
 
-        const mappedExcelCol = columnMapping[sqlCol.name];
-        const rawValue = mappedExcelCol ? excelRow[mappedExcelCol] : undefined;
+      for (const sqlCol of tableColumns) {
+         if (sqlCol.isIdentity) continue;
+         const mappedExcelCol = columnMapping[sqlCol.name];
+         transformedRow[sqlCol.name] = mappedExcelCol ? excelRow[mappedExcelCol] : undefined;
+      }
+      
+      for (const sqlCol of tableColumns) {
+        if (sqlCol.isIdentity) continue;
+
+        const rawValue = transformedRow[sqlCol.name];
         
         // 1. Check for missing required values
-        if (sqlCol.isRequired && (rawValue === undefined || rawValue === null || rawValue === '')) {
+        if (sqlCol.isRequired && (rawValue === undefined || rawValue === null || String(rawValue).trim() === '')) {
             errorDetails.push({
                 row: excelRowNumber,
                 column: sqlCol.name,
@@ -75,11 +82,11 @@ const validateDataFlow = ai.defineFlow(
                 error: `Required value is missing.`,
             });
             rowHasError = true;
-            continue; // Go to next column
+            continue; 
         }
 
         // Skip validation for non-required empty values
-        if (!sqlCol.isRequired && (rawValue === undefined || rawValue === null || rawValue === '')) {
+        if (!sqlCol.isRequired && (rawValue === undefined || rawValue === null || String(rawValue).trim() === '')) {
             continue;
         }
 
@@ -96,7 +103,6 @@ const validateDataFlow = ai.defineFlow(
                 break;
             case 'decimal(38,0)':
             case 'decimal(10,0)':
-                 // Remove common currency symbols and commas
                 const cleanedValue = String(rawValue).replace(/[$,]/g, '');
                 parsedValue = parseFloat(cleanedValue);
                 if (isNaN(parsedValue)) {
@@ -105,16 +111,37 @@ const validateDataFlow = ai.defineFlow(
                 }
                 break;
             case 'datetime':
-                // Try to parse various common date formats
-                const date = parse(String(rawValue), 'yyyy-MM-dd', new Date());
-                if (isNaN(date.getTime())) {
-                     errorDetails.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Invalid date format. Expected YYYY-MM-DD.' });
-                     rowHasError = true;
+                // Handle Excel's numeric date format
+                if (typeof rawValue === 'number' && rawValue > 0) {
+                    const date = new Date(Math.round((rawValue - 25569) * 86400 * 1000));
+                     if (!isValid(date)) {
+                        errorDetails.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Invalid Excel date serial number.' });
+                        rowHasError = true;
+                    }
+                } else { // Handle string dates
+                    const dateStr = String(rawValue);
+                    // Attempt to parse multiple formats, e.g. YYYY-MM-DD, MM/DD/YYYY
+                    const supportedFormats = ['yyyy-MM-dd', 'MM/dd/yyyy', "yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd HH:mm:ss"];
+                    let parsedDate = null;
+                    for(const format of supportedFormats) {
+                        const d = parse(dateStr, format, new Date());
+                        if (isValid(d)) {
+                            parsedDate = d;
+                            break;
+                        }
+                    }
+                    if (!parsedDate) {
+                        errorDetails.push({ row: excelRowNumber, column: sqlCol.name, value: dateStr, error: 'Invalid or unsupported date format.' });
+                        rowHasError = true;
+                    }
                 }
                 break;
             case 'varchar(100)':
                 if(typeof rawValue !== 'string' && typeof rawValue !== 'number'){
-                    errorDetails.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Must be a valid string.' });
+                    errorDetails.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Must be a valid string or number.' });
+                    rowHasError = true;
+                } else if (String(rawValue).length > 100) {
+                     errorDetails.push({ row: excelRowNumber, column: sqlCol.name, value: `"${String(rawValue).substring(0, 20)}..."`, error: 'Exceeds max length of 100 characters.' });
                     rowHasError = true;
                 }
                 break;
@@ -126,13 +153,10 @@ const validateDataFlow = ai.defineFlow(
       }
     });
     
-    // In a real run, this is where you'd execute the DB logic.
-    // For now, validRows will represent "inserted" for a dry run.
-    
     return {
       totalRows: excelData.length,
       validRows: validRows,
-      errors: errorDetails.length > 0 ? Array.from(new Set(errorDetails.map(e => e.row))).length : 0,
+      errors: Array.from(new Set(errorDetails.map(e => e.row))).length,
       skipped: 0, // Implement duplicate check logic here in the future
       errorDetails: errorDetails,
     };
