@@ -17,3 +17,18 @@ export type SqlColumn = {
   isRequired: boolean;
   description: string;
 };
+
+export type ErrorDetail = {
+    row: number;
+    column: string;
+    value: string;
+    error: string;
+};
+
+export type ValidateDataOutput = {
+  totalRows: number;
+  validRows: number;
+  errors: number;
+  skipped: number;
+  errorDetails: ErrorDetail[];
+};
