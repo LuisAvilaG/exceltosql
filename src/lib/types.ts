@@ -1,4 +1,4 @@
-export type ExcelData = { [key: string]: string | number | null }[];
+export type ExcelData = { [key: string]: any };
 
 export type ColumnMapping = {
   [key: string]: string | null; // Maps SQL column name to Excel header name
@@ -28,6 +28,7 @@ export type ErrorDetail = {
 export type ValidateDataOutput = {
   totalRows: number;
   validRows: number;
+
   errors: number;
   skipped: number;
   errorDetails: ErrorDetail[];
