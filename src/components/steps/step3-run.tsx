@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -112,8 +113,15 @@ export function Step3Run({
                   continue;
                 }
 
+                // Handle unmapped, non-required columns
                 if (!sqlCol.isRequired && (rawValue === undefined || rawValue === null || String(rawValue).trim() === '')) {
-                    transformedRow[sqlCol.name] = null;
+                    if (sqlCol.name === 'MeraAreaId') {
+                        transformedRow[sqlCol.name] = null;
+                    } else if (sqlCol.type.startsWith('decimal') || sqlCol.type === 'int') {
+                        transformedRow[sqlCol.name] = 0;
+                    } else {
+                        transformedRow[sqlCol.name] = null;
+                    }
                     continue;
                 }
                 
@@ -137,6 +145,7 @@ export function Step3Run({
                         break;
                     case 'datetime':
                         if (typeof rawValue === 'number') {
+                             // Handle Excel serial date number
                              const date = new Date(Math.round((rawValue - 25569) * 86400 * 1000));
                              if (!isValid(date)) {
                                 localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Invalid Excel date serial number.' });
@@ -146,15 +155,25 @@ export function Step3Run({
                             }
                         } else {
                             const dateStr = String(rawValue);
+                            // More robust parsing for various string formats
                             const supportedFormats = ["yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd HH:mm:ss", 'yyyy-MM-dd', 'MM/dd/yyyy'];
                             let parsedDate = null;
-                            for(const format of supportedFormats) {
-                                const d = parse(dateStr, format, new Date());
-                                if (isValid(d)) {
-                                    parsedDate = d;
-                                    break;
+                            
+                            // Check if it's already a valid ISO string
+                            const isoDate = new Date(dateStr);
+                            if (isValid(isoDate) && dateStr.includes('T')) {
+                                parsedDate = isoDate;
+                            } else {
+                                // Try other formats
+                                for(const format of supportedFormats) {
+                                    const d = parse(dateStr, format, new Date());
+                                    if (isValid(d)) {
+                                        parsedDate = d;
+                                        break;
+                                    }
                                 }
                             }
+
                             if (!parsedDate) {
                                 localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: dateStr, error: 'Invalid or unsupported date format.' });
                                 rowHasError = true;
@@ -275,7 +294,7 @@ export function Step3Run({
             tableName,
             columnMapping,
             duplicateStrategy,
-            strictMode,
+            strictMode: strictMode as 'tolerant' | 'strict',
             batchSize: parseInt(batchSize, 10) || 1000,
             deleteAll,
             primaryKey: (duplicateStrategy === 'skip' || duplicateStrategy === 'upsert') ? primaryKey : undefined,
