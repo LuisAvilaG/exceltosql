@@ -40,23 +40,31 @@ import {
 import { mockJobHistory } from '@/lib/placeholder-data';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { testDbConnection } from '@/ai/flows/test-db-connection';
 
 export function Header() {
   const [isTestConnOpen, setIsTestConnOpen] = useState(false);
   const [testStatus, setTestStatus] = useState<
     'idle' | 'testing' | 'success' | 'error'
   >('idle');
+  const [errorMessage, setErrorMessage] = useState('');
   const { toast } = useToast();
 
-  const handleTestConnection = () => {
+  const handleTestConnection = async () => {
     setTestStatus('testing');
-    setTimeout(() => {
-      if (Math.random() > 0.2) {
+    setErrorMessage('');
+    try {
+      const result = await testDbConnection();
+      if (result.success) {
         setTestStatus('success');
       } else {
         setTestStatus('error');
+        setErrorMessage(result.error || 'An unknown error occurred.');
       }
-    }, 1500);
+    } catch (error) {
+      setTestStatus('error');
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    }
   };
 
   const handleDownloadLogs = (jobId: string) => {
@@ -64,6 +72,11 @@ export function Header() {
       title: 'Function not implemented',
       description: `Log download for job ${jobId} is a simulation.`,
     });
+  };
+  
+  const resetTestState = () => {
+    setTestStatus('idle');
+    setErrorMessage('');
   };
 
   return (
@@ -83,7 +96,10 @@ export function Header() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setIsTestConnOpen(true)}
+            onClick={() => {
+              resetTestState();
+              setIsTestConnOpen(true)
+            }}
           >
             <TestTube2 className="mr-2 h-4 w-4" />
             Test Connection
@@ -143,7 +159,12 @@ export function Header() {
         </div>
       </div>
 
-      <Dialog open={isTestConnOpen} onOpenChange={setIsTestConnOpen}>
+      <Dialog open={isTestConnOpen} onOpenChange={(isOpen) => {
+        setIsTestConnOpen(isOpen);
+        if (!isOpen) {
+            resetTestState();
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>SQL Server Connection</DialogTitle>
@@ -188,7 +209,7 @@ export function Header() {
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Connection Error</AlertTitle>
                 <AlertDescription>
-                  Could not connect to the database. Check your environment variables and network connection.
+                  {errorMessage || "Could not connect to the database. Check your environment variables and network connection."}
                 </AlertDescription>
               </Alert>
             )}
