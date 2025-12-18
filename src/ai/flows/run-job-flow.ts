@@ -1,40 +1,8 @@
 'use server';
 import { ai } from '@/ai/genkit';
-import { z } from 'zod';
 import * as sql from 'mssql';
 import { tableColumns } from '@/lib/schema';
-import type { ExcelData } from '@/lib/types';
-
-const RunJobSettingsSchema = z.object({
-  tableName: z.string(),
-  columnMapping: z.record(z.string(), z.string().nullable()),
-  duplicateStrategy: z.enum(['insert_only', 'skip', 'upsert']),
-  strictMode: z.enum(['tolerant', 'strict']),
-  batchSize: z.number().int().positive(),
-  deleteAll: z.boolean(),
-  primaryKey: z.string().optional(),
-});
-
-export const RunJobInputSchema = z.object({
-  data: z.array(z.record(z.any())),
-  settings: RunJobSettingsSchema,
-});
-export type RunJobInput = z.infer<typeof RunJobInputSchema>;
-
-export const RunJobOutputSchema = z.object({
-  success: z.boolean(),
-  inserted: z.number(),
-  updated: z.number(),
-  skipped: z.number(),
-  errorCount: z.number(),
-  errorDetails: z.array(z.object({
-    row: z.number(),
-    column: z.string(),
-    value: z.any(),
-    error: z.string(),
-  })).optional(),
-});
-export type RunJobOutput = z.infer<typeof RunJobOutputSchema>;
+import { RunJobInputSchema, RunJobOutputSchema, RunJobInput, RunJobOutput } from '@/lib/types';
 
 const config: sql.config = {
   user: process.env.SQL_USER,

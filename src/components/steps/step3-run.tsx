@@ -23,18 +23,19 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import type { ColumnMapping, RunSettings, ExcelData, ErrorDetail } from '@/lib/types';
+import type { ColumnMapping, ExcelData, ErrorDetail, RunJobInput, RunJobOutput } from '@/lib/types';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { tableColumns, tableName } from '@/lib/schema';
 import { parse, isValid } from 'date-fns';
-import { runJob, RunJobInput, RunJobOutput } from '@/ai/flows/run-job-flow';
+import { runJob } from '@/ai/flows/run-job-flow';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 interface Step3RunProps {
   fileName: string;
-  excelData: ExcelData;
+  excelData: ExcelData[];
   columnMapping: ColumnMapping;
   onBack: () => void;
   onNewJob: () => void;
@@ -66,7 +67,7 @@ export function Step3Run({
   // States for batch processing
   const [progress, setProgress] = useState(0);
   const [errorDetails, setErrorDetails] = useState<ErrorDetail[]>([]);
-  const [validRows, setValidRows] = useState<ExcelData>([]);
+  const [validRows, setValidRows] = useState<ExcelData[]>([]);
   const [jobResult, setJobResult] = useState<JobResult | null>(null);
 
   // Settings state
@@ -79,7 +80,7 @@ export function Step3Run({
   const validateData = useCallback(async () => {
       setStatus('validating');
       let localErrors: ErrorDetail[] = [];
-      let localValidRows: ExcelData = [];
+      let localValidRows: ExcelData[] = [];
       let processedCount = 0;
 
       const totalRows = excelData.length;
@@ -190,7 +191,7 @@ export function Step3Run({
   }, [excelData, columnMapping]);
 
 
-  const startJob = useCallback(async (validatedData: ExcelData, settings: RunJobInput['settings']) => {
+  const startJob = useCallback(async (validatedData: ExcelData[], settings: RunJobInput['settings']) => {
       setStatus('running');
       setProgress(0);
 

@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export type ExcelData = { [key: string]: any };
 
 export type ColumnMapping = {
@@ -28,8 +30,40 @@ export type ErrorDetail = {
 export type ValidateDataOutput = {
   totalRows: number;
   validRows: number;
-
   errors: number;
   skipped: number;
   errorDetails: ErrorDetail[];
 };
+
+
+// Schemas moved from run-job-flow.ts
+const RunJobSettingsSchema = z.object({
+  tableName: z.string(),
+  columnMapping: z.record(z.string(), z.string().nullable()),
+  duplicateStrategy: z.enum(['insert_only', 'skip', 'upsert']),
+  strictMode: z.enum(['tolerant', 'strict']),
+  batchSize: z.number().int().positive(),
+  deleteAll: z.boolean(),
+  primaryKey: z.string().optional(),
+});
+
+export const RunJobInputSchema = z.object({
+  data: z.array(z.record(z.any())),
+  settings: RunJobSettingsSchema,
+});
+export type RunJobInput = z.infer<typeof RunJobInputSchema>;
+
+export const RunJobOutputSchema = z.object({
+  success: z.boolean(),
+  inserted: z.number(),
+  updated: z.number(),
+  skipped: z.number(),
+  errorCount: z.number(),
+  errorDetails: z.array(z.object({
+    row: z.number(),
+    column: z.string(),
+    value: z.any(),
+    error: z.string(),
+  })).optional(),
+});
+export type RunJobOutput = z.infer<typeof RunJobOutputSchema>;
