@@ -87,17 +87,7 @@ const runJobFlow = ai.defineFlow(
             });
             
             data.forEach(row => {
-                const values = mappedCols.map(col => {
-                    let val = row[col.name];
-                     // SERVER-SIDE DATE CONVERSION:
-                     // Force conversion to a Date object if the column is 'datetime' and value is a string.
-                     if (col.type === 'datetime' && typeof val === 'string') {
-                        // The string is expected to be 'YYYY-MM-DD', new Date() handles this correctly,
-                        // interpreting it as UTC midnight.
-                        return new Date(val);
-                    }
-                    return val;
-                });
+                const values = mappedCols.map(col => row[col.name]);
                 table.rows.add(...values);
             });
 
@@ -115,10 +105,7 @@ const runJobFlow = ai.defineFlow(
                 
                 const rowRequest = new sql.Request(transaction);
                 mappedCols.forEach((col, idx) => {
-                    let val = row[col.name];
-                     if (col.type === 'datetime' && typeof val === 'string') {
-                        return new Date(val);
-                    }
+                    const val = row[col.name];
                     rowRequest.input(`param${idx}`, val);
                 });
                 
