@@ -101,7 +101,7 @@ export function Step1Upload() {
             fileHeaders.forEach(header => {
                 const value = newRow[header];
                 if (value instanceof Date && isValid(value)) {
-                    // Correct for timezone offset and format as YYYY-MM-DD
+                    // Correct for timezone offset from UTC and format as YYYY-MM-DD
                     const userTimezoneOffset = value.getTimezoneOffset() * 60000;
                     const correctedDate = new Date(value.getTime() + userTimezoneOffset);
                     newRow[header] = format(correctedDate, 'yyyy-MM-dd');
@@ -154,11 +154,7 @@ export function Step1Upload() {
   };
 
   const formatCell = (value: any) => {
-    const stringValue = String(value ?? '');
-    if (/^\d{4}-\d{2}-\d{2} 00:00:00$/.test(stringValue)) {
-      return stringValue.substring(0, 10);
-    }
-    return stringValue;
+    return String(value ?? '');
   }
 
   return (
