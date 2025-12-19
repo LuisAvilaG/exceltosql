@@ -58,6 +58,10 @@ const runJobFlow = ai.defineFlow(
     let totalErrorCount = 0;
     const allErrorDetails: any[] = [];
 
+    if (!data || data.length === 0) {
+      return { success: true, inserted: 0, updated: 0, skipped: 0, errorCount: 0, errorDetails: [] };
+    }
+
     try {
       const pool = await getPool();
 
@@ -65,7 +69,7 @@ const runJobFlow = ai.defineFlow(
         const deleteRequest = new sql.Request(pool);
         await deleteRequest.query(`TRUNCATE TABLE ${settings.tableName}`);
       }
-
+      
       const mappedCols = tableColumns.filter(c => !c.isIdentity && settings.columnMapping[c.name]);
       const transaction = new sql.Transaction(pool);
       await transaction.begin();
@@ -85,7 +89,11 @@ const runJobFlow = ai.defineFlow(
             data.forEach(row => {
                 const values = mappedCols.map(col => {
                     let val = row[col.name];
+                     // SERVER-SIDE DATE CONVERSION:
+                     // Force conversion to a Date object if the column is 'datetime' and value is a string.
                      if (col.type === 'datetime' && typeof val === 'string') {
+                        // The string is expected to be 'YYYY-MM-DD', new Date() handles this correctly,
+                        // interpreting it as UTC midnight.
                         return new Date(val);
                     }
                     return val;
@@ -96,10 +104,9 @@ const runJobFlow = ai.defineFlow(
             const bulkRequest = new sql.Request(transaction);
             const result = await bulkRequest.bulk(table);
             totalInserted += result.rowsAffected;
+
         } else {
            // Fallback for row-by-row strategies (skip/upsert)
-           // This logic remains to be implemented fully for those strategies.
-           // For now, it will act like a slower insert.
            for (const row of data) {
              try {
                 const columns = mappedCols.map(c => `[${c.name}]`).join(', ');
@@ -108,7 +115,10 @@ const runJobFlow = ai.defineFlow(
                 
                 const rowRequest = new sql.Request(transaction);
                 mappedCols.forEach((col, idx) => {
-                    const val = row[col.name];
+                    let val = row[col.name];
+                     if (col.type === 'datetime' && typeof val === 'string') {
+                        return new Date(val);
+                    }
                     rowRequest.input(`param${idx}`, val);
                 });
                 
@@ -144,5 +154,3 @@ const runJobFlow = ai.defineFlow(
 export async function runJob(input: RunJobInput): Promise<RunJobOutput> {
   return await runJobFlow(input);
 }
-
-    
