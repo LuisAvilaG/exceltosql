@@ -36,7 +36,7 @@ async function getPool(): Promise<sql.ConnectionPool> {
 function getSqlType(typeName: string): any {
     const typeMap: { [key: string]: any } = {
         'int': sql.Int,
-        'datetime': sql.DateTime,
+        'datetime': sql.Date, // Use sql.Date to force only the date part
         'varchar(100)': sql.NVarChar(100),
         'decimal(38,0)': sql.Decimal(38, 0),
         'decimal(10,0)': sql.Decimal(10, 0),
@@ -87,7 +87,12 @@ const runJobFlow = ai.defineFlow(
             });
             
             data.forEach(row => {
-                const values = mappedCols.map(col => row[col.name]);
+                const values = mappedCols.map(col => {
+                    const val = row[col.name];
+                    // The value is already a 'YYYY-MM-DD' string from the client, pass it directly.
+                    // sql.Date type will handle the correct insertion.
+                    return val;
+                });
                 table.rows.add(...values);
             });
 
@@ -106,7 +111,8 @@ const runJobFlow = ai.defineFlow(
                 const rowRequest = new sql.Request(transaction);
                 mappedCols.forEach((col, idx) => {
                     const val = row[col.name];
-                    rowRequest.input(`param${idx}`, val);
+                    const sqlType = getSqlType(col.type);
+                    rowRequest.input(`param${idx}`, sqlType, val);
                 });
                 
                 await rowRequest.query(query);
