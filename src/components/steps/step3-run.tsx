@@ -29,7 +29,7 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { tableColumns, tableName } from '@/lib/schema';
-import { parse, isValid } from 'date-fns';
+import { parse, isValid, format } from 'date-fns';
 import { runJob } from '@/ai/flows/run-job-flow';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useDataContext } from '@/context/data-context';
@@ -121,36 +121,41 @@ export function Step3Run() {
                             }
                             break;
                         case 'datetime':
-                            if (typeof rawValue === 'number') {
-                                const date = new Date(Math.round((rawValue - 25569) * 86400 * 1000));
-                                if (!isValid(date)) {
-                                    localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Invalid Excel date serial number.' });
-                                    rowHasError = true;
-                                } else {
-                                    parsedValue = date.toISOString();
+                            let parsedDate : Date | null = null;
+                            if (rawValue instanceof Date && isValid(rawValue)) {
+                                parsedDate = rawValue;
+                            } else if (typeof rawValue === 'number') {
+                                // Handle Excel serial date number
+                                const excelEpoch = new Date(1899, 11, 30);
+                                const date = new Date(excelEpoch.getTime() + rawValue * 24 * 60 * 60 * 1000);
+                                if (isValid(date)) {
+                                    parsedDate = date;
                                 }
                             } else {
                                 const dateStr = String(rawValue);
-                                const supportedFormats = ["yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd HH:mm:ss", 'yyyy-MM-dd', 'MM/dd/yyyy'];
-                                let parsedDate = null;
+                                const supportedFormats = ["yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd HH:mm:ss", 'yyyy-MM-dd', 'MM/dd/yyyy', 'M/d/yy'];
                                 const isoDate = new Date(dateStr);
-                                if (isValid(isoDate) && dateStr.includes('T')) {
+                                if (isValid(isoDate) && (dateStr.includes('T') || /^\d{4}-\d{2}-\d{2}$/.test(dateStr))) {
                                     parsedDate = isoDate;
                                 } else {
-                                    for(const format of supportedFormats) {
-                                        const d = parse(dateStr, format, new Date());
+                                    for(const fmt of supportedFormats) {
+                                        const d = parse(dateStr, fmt, new Date());
                                         if (isValid(d)) {
                                             parsedDate = d;
                                             break;
                                         }
                                     }
                                 }
-                                if (!parsedDate) {
-                                    localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: dateStr, error: 'Invalid or unsupported date format.' });
-                                    rowHasError = true;
-                                } else {
-                                    parsedValue = parsedDate.toISOString();
-                                }
+                            }
+
+                            if (parsedDate) {
+                                // Timezone offset correction
+                                const userTimezoneOffset = parsedDate.getTimezoneOffset() * 60000;
+                                const correctedDate = new Date(parsedDate.getTime() + userTimezoneOffset);
+                                parsedValue = format(correctedDate, 'yyyy-MM-dd');
+                            } else {
+                                localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Invalid or unsupported date format.' });
+                                rowHasError = true;
                             }
                             break;
                         case 'varchar(100)':
@@ -340,8 +345,7 @@ export function Step3Run() {
               </div>
               <div className="p-4 bg-secondary rounded-lg">
                 <p className="text-2xl font-bold text-destructive">{jobResult.errors}</p>
-                <p className="text-sm text-muted-foreground">Rows with Errors</p>
-              </div>
+                <p className="text-sm text-muted-foreground">Rows with Errors</p>              </div>
             </div>
             {jobResult.errors > 0 && (
               <div>
@@ -474,7 +478,7 @@ export function Step3Run() {
                     {status === 'validating' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
                     Validate (Dry Run)
                 </Button>
-                 <Button onClick={startJob} disabled={true} className="bg-gray-400 text-white" title="Complete a Dry Run first">
+                 <Button onClick={startJob} disabled={!dryRunCompleted} className="bg-gray-400 text-white" title="Complete a Dry Run first">
                     <CheckCircle className="mr-2 h-4 w-4" />
                     Start Real Job
                 </Button>
