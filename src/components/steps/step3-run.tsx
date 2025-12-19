@@ -133,7 +133,9 @@ export function Step3Run() {
                                 }
                             } else {
                                 const dateStr = String(rawValue);
-                                const supportedFormats = ["yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd HH:mm:ss", 'yyyy-MM-dd', 'MM/dd/yyyy', 'M/d/yy'];
+                                // More robust parsing for various formats
+                                const supportedFormats = ["yyyy-MM-dd", "MM/dd/yyyy", 'M/d/yy', "yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd HH:mm:ss"];
+                                
                                 const isoDate = new Date(dateStr);
                                 if (isValid(isoDate) && (dateStr.includes('T') || /^\d{4}-\d{2}-\d{2}$/.test(dateStr))) {
                                     parsedDate = isoDate;
@@ -149,7 +151,6 @@ export function Step3Run() {
                             }
 
                             if (parsedDate) {
-                                // Timezone offset correction
                                 const userTimezoneOffset = parsedDate.getTimezoneOffset() * 60000;
                                 const correctedDate = new Date(parsedDate.getTime() + userTimezoneOffset);
                                 parsedValue = format(correctedDate, 'yyyy-MM-dd');
@@ -276,7 +277,7 @@ export function Step3Run() {
         setStatus('finished');
       }
 
-  }, [validRows, toast, tableName, columnMapping, duplicateStrategy, strictMode, batchSize, deleteAll, primaryKey]);
+  }, [validRows, toast, columnMapping, duplicateStrategy, strictMode, batchSize, deleteAll, primaryKey]);
 
 
   const handleDryRun = async () => {
@@ -466,7 +467,7 @@ export function Step3Run() {
                     Start New Job
                 </Button>
                 {dryRunCompleted && (
-                  <Button onClick={startJob} disabled={!dryRunCompleted || status === 'running' || status === 'validating' || validRows.length === 0} className="bg-green-600 text-white hover:bg-green-700">
+                  <Button onClick={startJob} disabled={status === 'running' || status === 'validating' || validRows.length === 0} className="bg-green-600 text-white hover:bg-green-700">
                       {status === 'running' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
                       Start Real Job
                   </Button>
@@ -488,5 +489,3 @@ export function Step3Run() {
     </Card>
   );
 }
-
-    

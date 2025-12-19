@@ -31,7 +31,7 @@ import {
 import { UploadCloud, FileSpreadsheet, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ExcelData } from '@/lib/types';
-import { isValid } from 'date-fns';
+import { isValid, format } from 'date-fns';
 import { useDataContext } from '@/context/data-context';
 
 export function Step1Upload() {
@@ -101,7 +101,10 @@ export function Step1Upload() {
             fileHeaders.forEach(header => {
                 const value = newRow[header];
                 if (value instanceof Date && isValid(value)) {
-                    newRow[header] = value.toISOString().split('T')[0];
+                    // Correct for timezone offset and format as YYYY-MM-DD
+                    const userTimezoneOffset = value.getTimezoneOffset() * 60000;
+                    const correctedDate = new Date(value.getTime() + userTimezoneOffset);
+                    newRow[header] = format(correctedDate, 'yyyy-MM-dd');
                 }
             });
             return newRow;
