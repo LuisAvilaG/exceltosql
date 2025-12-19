@@ -154,6 +154,9 @@ export function Step3Run() {
                                 const userTimezoneOffset = parsedDate.getTimezoneOffset() * 60000;
                                 const correctedDate = new Date(parsedDate.getTime() + userTimezoneOffset);
                                 parsedValue = format(correctedDate, 'yyyy-MM-dd');
+                                if (sqlCol.name === 'SalesDate') {
+                                  console.log(`Row ${excelRowNumber}: Preparing SalesDate with value:`, parsedValue);
+                                }
                             } else {
                                 localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Invalid or unsupported date format.' });
                                 rowHasError = true;
@@ -489,3 +492,5 @@ export function Step3Run() {
     </Card>
   );
 }
+
+    
