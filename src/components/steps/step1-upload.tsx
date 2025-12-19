@@ -153,6 +153,14 @@ export function Step1Upload() {
     }
   };
 
+  const formatCell = (value: any) => {
+    const stringValue = String(value ?? '');
+    if (/^\d{4}-\d{2}-\d{2} 00:00:00$/.test(stringValue)) {
+      return stringValue.substring(0, 10);
+    }
+    return stringValue;
+  }
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -229,7 +237,7 @@ export function Step1Upload() {
                       <TableRow key={rowIndex}>
                         {headers.map((header) => (
                           <TableCell key={`${rowIndex}-${header}`}>
-                            {String(row[header] ?? '')}
+                            {formatCell(row[header])}
                           </TableCell>
                         ))}
                       </TableRow>
