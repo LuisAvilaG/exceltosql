@@ -76,13 +76,13 @@ export function Step3Run() {
           const batch = excelData.slice(i, i + VALIDATION_BATCH_SIZE);
           
           batch.forEach((excelRow, batchIndex) => {
-              let rowHasError = false;
               const originalIndex = i + batchIndex;
               const excelRowNumber = originalIndex + 2; 
-
               const transformedRow: { [key: string]: any } = {};
+              let rowHasError = false;
               
               for (const sqlCol of tableColumns) {
+                if (rowHasError) continue; // Skip other columns if one has an error
                 if (sqlCol.isIdentity) continue;
 
                 const mappedExcelCol = columnMapping[sqlCol.name];
@@ -127,13 +127,10 @@ export function Step3Run() {
                             if (rawValue instanceof Date && isValid(rawValue)) {
                                 parsedDate = rawValue;
                             } else if (typeof rawValue === 'number' && rawValue > 1) {
-                                // Handle Excel serial date number
                                 const excelEpoch = new Date(1899, 11, 30);
                                 parsedDate = new Date(excelEpoch.getTime() + rawValue * 24 * 60 * 60 * 1000);
                             } else {
-                                // More robust parsing for various string formats
                                 const supportedFormats = ["yyyy-MM-dd", "dd/MM/yyyy", "MM/dd/yyyy", 'M/d/yy', "yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd HH:mm:ss"];
-                                
                                 for(const fmt of supportedFormats) {
                                     const d = parse(dateStr, fmt, new Date());
                                     if (isValid(d)) {
@@ -144,26 +141,29 @@ export function Step3Run() {
                             }
 
                             if (parsedDate && isValid(parsedDate)) {
-                                // IMPORTANT: Correct for timezone issues and format to YYYY-MM-DD string
                                 const userTimezoneOffset = parsedDate.getTimezoneOffset() * 60000;
                                 const correctedDate = new Date(parsedDate.getTime() + userTimezoneOffset);
                                 parsedValue = format(correctedDate, 'yyyy-MM-dd');
+                                if (sqlCol.name === 'SalesDate') {
+                                    console.log(`Row ${excelRowNumber}: Preparing SalesDate with value: ${parsedValue}`);
+                                }
                             } else {
                                 localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Invalid or unsupported date format.' });
                                 rowHasError = true;
                             }
                             break;
                         case 'varchar(100)':
-                            if (String(rawValue).length > 100) {
-                                localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: `"${String(rawValue).substring(0, 20)}..."`, error: 'Exceeds max length of 100 characters.' });
+                            parsedValue = String(rawValue);
+                            if (parsedValue.length > 100) {
+                                localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: `"${parsedValue.substring(0, 20)}..."`, error: 'Exceeds max length of 100 characters.' });
                                 rowHasError = true;
-                            } else {
-                                parsedValue = String(rawValue);
                             }
                             break;
                     }
                 }
-                transformedRow[sqlCol.name] = parsedValue;
+                if (!rowHasError) {
+                    transformedRow[sqlCol.name] = parsedValue;
+                }
               }
 
               if (!rowHasError) {
@@ -209,7 +209,39 @@ export function Step3Run() {
       let allJobErrors: ErrorDetail[] = [];
 
       try {
-        for (let i = 0; i < numBatches; i++) {
+        // First batch handles potential deletion
+        if (numBatches > 0) {
+            const firstBatch = validRows.slice(0, Math.min(jobBatchSize, totalRowsToProcess));
+            const firstJobSettings: RunJobInput['settings'] = {
+                tableName,
+                columnMapping,
+                duplicateStrategy,
+                strictMode: strictMode as 'tolerant' | 'strict',
+                batchSize: firstBatch.length,
+                deleteAll: deleteAll, 
+                primaryKey: (duplicateStrategy === 'skip' || duplicateStrategy === 'upsert') ? primaryKey : undefined,
+            };
+
+            const result = await runJob({ data: firstBatch, settings: firstJobSettings });
+
+            if (result.success) {
+                totalInserted += result.inserted;
+                totalUpdated += result.updated;
+                totalSkipped += result.skipped;
+            }
+            totalErrorCount += result.errorCount;
+            if (result.errorDetails) {
+                allJobErrors = [...allJobErrors, ...result.errorDetails];
+            }
+            setProgress(Math.round((1 / numBatches) * 100));
+
+            if (!result.success && strictMode === 'strict') {
+                throw new Error(result.errorDetails?.[0]?.error || "Job aborted due to an error in the first batch.");
+            }
+        }
+        
+        // Subsequent batches
+        for (let i = 1; i < numBatches; i++) {
           const batchStart = i * jobBatchSize;
           const batchEnd = batchStart + jobBatchSize;
           const currentBatch = validRows.slice(batchStart, batchEnd);
@@ -220,7 +252,7 @@ export function Step3Run() {
               duplicateStrategy,
               strictMode: strictMode as 'tolerant' | 'strict',
               batchSize: currentBatch.length,
-              deleteAll: i === 0 ? deleteAll : false,
+              deleteAll: false, // only first batch can delete
               primaryKey: (duplicateStrategy === 'skip' || duplicateStrategy === 'upsert') ? primaryKey : undefined,
           };
         
@@ -240,8 +272,7 @@ export function Step3Run() {
           setProgress(Math.round(((i + 1) / numBatches) * 100));
 
           if (!result.success && strictMode === 'strict') {
-             toast({ variant: "destructive", title: "Strict Mode Error", description: result.errorDetails?.[0]?.error || "Job aborted due to an error in a batch." });
-             break; // Abort on strict mode failure
+             throw new Error(result.errorDetails?.[0]?.error || "Job aborted due to an error in a subsequent batch.");
           }
         }
         
@@ -302,7 +333,7 @@ export function Step3Run() {
         totalRows: excelData.length,
         inserted: localValidRows.length, // Represents valid rows in a dry run
         updated: 0,
-        skipped: 0, // Represents rows with errors in a dry run
+        skipped: 0, 
         errors: localErrors.length,
         errorDetails: localErrors,
     });
@@ -491,3 +522,5 @@ export function Step3Run() {
     </Card>
   );
 }
+
+    
