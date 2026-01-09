@@ -4,12 +4,13 @@ import { ai } from '@/ai/genkit';
 import * as sql from 'mssql';
 import { tableColumns } from '@/lib/schema';
 import { RunJobInputSchema, RunJobOutputSchema, RunJobInput, RunJobOutput } from '@/lib/types';
+import { parse } from 'date-fns';
 
 // Let SQL driver manage the connection pool
 let pool: sql.ConnectionPool | null = null;
 
 async function getPool(): Promise<sql.ConnectionPool> {
-    if (pool) {
+    if (pool && pool.connected) {
         return pool;
     }
     const config: sql.config = {
@@ -29,6 +30,10 @@ async function getPool(): Promise<sql.ConnectionPool> {
       },
     };
     pool = await new sql.ConnectionPool(config).connect();
+    pool.on('error', err => {
+        console.error('SQL Pool Error', err);
+        pool = null; // Reset pool on error
+    });
     return pool;
 }
 
@@ -88,9 +93,13 @@ const runJobFlow = ai.defineFlow(
             
             data.forEach(row => {
                 const values = mappedCols.map(col => {
-                    const val = row[col.name];
-                    // The value is already a 'YYYY-MM-DD' string from the client, pass it directly.
-                    // sql.Date type will handle the correct insertion.
+                    let val = row[col.name];
+                    if (col.type === 'datetime' && typeof val === 'string') {
+                      // The mssql driver's `sql.Date` type expects a JS Date object.
+                      // The client sends 'YYYY-MM-DD' strings. We must parse them back.
+                      const parsedDate = parse(val, 'yyyy-MM-dd', new Date());
+                      return isNaN(parsedDate.getTime()) ? null : parsedDate;
+                    }
                     return val;
                 });
                 table.rows.add(...values);
