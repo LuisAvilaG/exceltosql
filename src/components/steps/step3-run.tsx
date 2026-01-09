@@ -128,16 +128,22 @@ export function Step3Run() {
                                 if (dateStr.includes('/')) {
                                     const parts = dateStr.split(' ')[0].split('/');
                                     if (parts.length === 3) {
-                                        const day = parts[0];
-                                        const month = parts[1];
-                                        const year = parts[2];
-                                        if (parseInt(month, 10) > 12) {
-                                             throw new Error(`Invalid month: ${month}`);
+                                        const month = parts[0];
+                                        const day = parts[1];
+                                        let year = parts[2];
+                                        if (year.length === 2) {
+                                            year = '20' + year; // Assume 21st century for 2-digit years
+                                        }
+
+                                        if (parseInt(month, 10) > 12 || parseInt(month, 10) < 1) {
+                                            throw new Error(`Invalid month: ${month}`);
+                                        }
+                                        if (parseInt(day, 10) > 31 || parseInt(day, 10) < 1) {
+                                            throw new Error(`Invalid day: ${day}`);
                                         }
                                         finalDateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
                                     }
                                 } else if (dateStr.includes('-')) {
-                                    // Assumes YYYY-MM-DD format already
                                     const parsed = parse(dateStr.split(' ')[0], 'yyyy-MM-dd', new Date());
                                     if(isValid(parsed)) {
                                         finalDateStr = dateStr.split(' ')[0];
@@ -145,11 +151,11 @@ export function Step3Run() {
                                 }
                                 
                                 if (!finalDateStr || !isValid(parse(finalDateStr, 'yyyy-MM-dd', new Date()))) {
-                                     throw new Error('Date is not in a recognized format (dd/MM/yyyy or yyyy-MM-dd).');
+                                     throw new Error('Date is not in a recognized format (MM/dd/yy or yyyy-MM-dd).');
                                 }
                                 
                                 parsedValue = finalDateStr;
-                                console.log(`Row ${excelRowNumber}: Preparing SalesDate with value: ${parsedValue}`);
+                                // console.log(`Row ${excelRowNumber}: Preparing SalesDate with value: ${parsedValue}`);
 
                             } catch (e: any) {
                                 localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: dateStr, error: e.message || 'Invalid or unsupported date format.' });
