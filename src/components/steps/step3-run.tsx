@@ -82,7 +82,7 @@ export function Step3Run() {
               let rowHasError = false;
               
               for (const sqlCol of tableColumns) {
-                if (rowHasError) continue; // Skip other columns if one has an error
+                if (rowHasError) continue;
                 if (sqlCol.isIdentity) continue;
 
                 const mappedExcelCol = columnMapping[sqlCol.name];
@@ -121,34 +121,38 @@ export function Step3Run() {
                             }
                             break;
                         case 'datetime':
-                            let parsedDate : Date | null = null;
-                            const dateStr = String(rawValue);
-
-                            if (rawValue instanceof Date && isValid(rawValue)) {
-                                parsedDate = rawValue;
-                            } else if (typeof rawValue === 'number' && rawValue > 1) {
-                                const excelEpoch = new Date(1899, 11, 30);
-                                parsedDate = new Date(excelEpoch.getTime() + rawValue * 24 * 60 * 60 * 1000);
-                            } else {
-                                const supportedFormats = ["yyyy-MM-dd", "dd/MM/yyyy", "MM/dd/yyyy", 'M/d/yy', "yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd HH:mm:ss"];
-                                for(const fmt of supportedFormats) {
-                                    const d = parse(dateStr, fmt, new Date());
-                                    if (isValid(d)) {
-                                        parsedDate = d;
-                                        break;
+                            const dateStr = String(rawValue).trim();
+                            let finalDateStr: string | null = null;
+                            
+                            try {
+                                if (dateStr.includes('/')) {
+                                    const parts = dateStr.split(' ')[0].split('/');
+                                    if (parts.length === 3) {
+                                        const day = parts[0];
+                                        const month = parts[1];
+                                        const year = parts[2];
+                                        if (parseInt(month, 10) > 12) {
+                                             throw new Error(`Invalid month: ${month}`);
+                                        }
+                                        finalDateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                                    }
+                                } else if (dateStr.includes('-')) {
+                                    // Assumes YYYY-MM-DD format already
+                                    const parsed = parse(dateStr.split(' ')[0], 'yyyy-MM-dd', new Date());
+                                    if(isValid(parsed)) {
+                                        finalDateStr = dateStr.split(' ')[0];
                                     }
                                 }
-                            }
-
-                            if (parsedDate && isValid(parsedDate)) {
-                                const userTimezoneOffset = parsedDate.getTimezoneOffset() * 60000;
-                                const correctedDate = new Date(parsedDate.getTime() + userTimezoneOffset);
-                                parsedValue = format(correctedDate, 'yyyy-MM-dd');
-                                if (sqlCol.name === 'SalesDate') {
-                                    console.log(`Row ${excelRowNumber}: Preparing SalesDate with value: ${parsedValue}`);
+                                
+                                if (!finalDateStr || !isValid(parse(finalDateStr, 'yyyy-MM-dd', new Date()))) {
+                                     throw new Error('Date is not in a recognized format (dd/MM/yyyy or yyyy-MM-dd).');
                                 }
-                            } else {
-                                localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Invalid or unsupported date format.' });
+                                
+                                parsedValue = finalDateStr;
+                                console.log(`Row ${excelRowNumber}: Preparing SalesDate with value: ${parsedValue}`);
+
+                            } catch (e: any) {
+                                localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: dateStr, error: e.message || 'Invalid or unsupported date format.' });
                                 rowHasError = true;
                             }
                             break;
@@ -522,5 +526,3 @@ export function Step3Run() {
     </Card>
   );
 }
-
-    
