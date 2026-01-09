@@ -122,39 +122,32 @@ export function Step3Run() {
                             break;
                         case 'datetime':
                             let parsedDate : Date | null = null;
+                            const dateStr = String(rawValue);
+
                             if (rawValue instanceof Date && isValid(rawValue)) {
                                 parsedDate = rawValue;
+                            } else if (typeof rawValue === 'number' && rawValue > 1) {
+                                // Handle Excel serial date number
+                                const excelEpoch = new Date(1899, 11, 30);
+                                parsedDate = new Date(excelEpoch.getTime() + rawValue * 24 * 60 * 60 * 1000);
                             } else {
-                                const dateStr = String(rawValue);
-                                // Handle Excel serial date number if it's parsed as a number
-                                if (typeof rawValue === 'number' && rawValue > 1) {
-                                     const excelEpoch = new Date(1899, 11, 30);
-                                     const d = new Date(excelEpoch.getTime() + rawValue * 24 * 60 * 60 * 1000);
-                                     if (isValid(d)) {
+                                // More robust parsing for various string formats
+                                const supportedFormats = ["yyyy-MM-dd", "dd/MM/yyyy", "MM/dd/yyyy", 'M/d/yy', "yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd HH:mm:ss"];
+                                
+                                for(const fmt of supportedFormats) {
+                                    const d = parse(dateStr, fmt, new Date());
+                                    if (isValid(d)) {
                                         parsedDate = d;
-                                     }
-                                } else {
-                                    // More robust parsing for various string formats
-                                    const supportedFormats = ["yyyy-MM-dd", "dd/MM/yyyy", "MM/dd/yyyy", 'M/d/yy', "yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd HH:mm:ss"];
-                                    
-                                    for(const fmt of supportedFormats) {
-                                        const d = parse(dateStr, fmt, new Date());
-                                        if (isValid(d)) {
-                                            parsedDate = d;
-                                            break;
-                                        }
+                                        break;
                                     }
                                 }
                             }
 
-                            if (parsedDate) {
+                            if (parsedDate && isValid(parsedDate)) {
                                 // IMPORTANT: Correct for timezone issues and format to YYYY-MM-DD string
                                 const userTimezoneOffset = parsedDate.getTimezoneOffset() * 60000;
                                 const correctedDate = new Date(parsedDate.getTime() + userTimezoneOffset);
                                 parsedValue = format(correctedDate, 'yyyy-MM-dd');
-                                if (sqlCol.name === 'SalesDate') {
-                                    console.log(`Row ${excelRowNumber}: Preparing SalesDate with value:`, parsedValue);
-                                }
                             } else {
                                 localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Invalid or unsupported date format.' });
                                 rowHasError = true;
@@ -422,7 +415,7 @@ export function Step3Run() {
                         <h3 className="font-semibold flex items-center gap-2"><AlertTriangle className="h-4 w-4" />Error Handling</h3>
                         <RadioGroup value={strictMode} onValueChange={v => setStrictMode(v as any)}>
                             <div className="flex items-center space-x-2"><RadioGroupItem value="tolerant" id="r4" /><Label htmlFor="r4">Tolerant: Insert valid rows, report errors</Label></div>
-                            <div className="flex items-center space-x-2"><RadioGroupItem value="strict" id="r5" /><Label htmlFor="r5">Strict: If one error occurs, abort the entire job</Label></div>
+                            <div className="flex items-center space-x-2"><RadioGroupItem value="strict" id="r5" /><Label htmlFor="r5">If one error occurs, abort the entire job</Label></div>
                         </RadioGroup>
                     </div>
                 </div>
