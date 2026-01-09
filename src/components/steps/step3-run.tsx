@@ -121,47 +121,43 @@ export function Step3Run() {
                             }
                             break;
                         case 'datetime':
-                            const dateStr = String(rawValue).trim();
-                            let finalDateStr: string | null = null;
+                            const dateStr = String(rawValue).trim().split(' ')[0];
+                            let finalDate: Date | null = null;
+                            let errorMessage = 'Invalid or unsupported date format.';
+
+                            if (dateStr.includes('/')) {
+                                const parts = dateStr.split('/');
+                                if (parts.length === 3) {
+                                    const yearPart = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+                                    
+                                    // Try DD/MM/YYYY
+                                    let attempt1 = parse(`${parts[0]}/${parts[1]}/${yearPart}`, 'dd/MM/yyyy', new Date());
+                                    if (isValid(attempt1)) {
+                                        finalDate = attempt1;
+                                    } else {
+                                        // Try MM/DD/YYYY
+                                        let attempt2 = parse(`${parts[0]}/${parts[1]}/${yearPart}`, 'MM/dd/yyyy', new Date());
+                                        if (isValid(attempt2)) {
+                                          finalDate = attempt2;
+                                        }
+                                    }
+                                }
+                            } else if (dateStr.includes('-')) {
+                                // Try YYYY-MM-DD
+                                const attempt = parse(dateStr, 'yyyy-MM-dd', new Date());
+                                if (isValid(attempt)) {
+                                    finalDate = attempt;
+                                }
+                            }
                             
-                            try {
-                                if (dateStr.includes('/')) {
-                                    const parts = dateStr.split(' ')[0].split('/');
-                                    if (parts.length === 3) {
-                                        const month = parts[0];
-                                        const day = parts[1];
-                                        let year = parts[2];
-                                        if (year.length === 2) {
-                                            year = '20' + year; // Assume 21st century for 2-digit years
-                                        }
-
-                                        if (parseInt(month, 10) > 12 || parseInt(month, 10) < 1) {
-                                            throw new Error(`Invalid month: ${month}`);
-                                        }
-                                        if (parseInt(day, 10) > 31 || parseInt(day, 10) < 1) {
-                                            throw new Error(`Invalid day: ${day}`);
-                                        }
-                                        finalDateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-                                    }
-                                } else if (dateStr.includes('-')) {
-                                    const parsed = parse(dateStr.split(' ')[0], 'yyyy-MM-dd', new Date());
-                                    if(isValid(parsed)) {
-                                        finalDateStr = dateStr.split(' ')[0];
-                                    }
-                                }
-                                
-                                if (!finalDateStr || !isValid(parse(finalDateStr, 'yyyy-MM-dd', new Date()))) {
-                                     throw new Error('Date is not in a recognized format (MM/dd/yy or yyyy-MM-dd).');
-                                }
-                                
-                                parsedValue = finalDateStr;
-                                // console.log(`Row ${excelRowNumber}: Preparing SalesDate with value: ${parsedValue}`);
-
-                            } catch (e: any) {
-                                localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: dateStr, error: e.message || 'Invalid or unsupported date format.' });
+                            if (finalDate) {
+                                parsedValue = format(finalDate, 'yyyy-MM-dd');
+                            } else {
+                                localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: dateStr, error: errorMessage });
                                 rowHasError = true;
                             }
                             break;
+
                         case 'varchar(100)':
                             parsedValue = String(rawValue);
                             if (parsedValue.length > 100) {
