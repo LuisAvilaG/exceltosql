@@ -124,22 +124,19 @@ export function Step3Run() {
                             let parsedDate : Date | null = null;
                             if (rawValue instanceof Date && isValid(rawValue)) {
                                 parsedDate = rawValue;
-                            } else if (typeof rawValue === 'number') {
-                                // Handle Excel serial date number
-                                const excelEpoch = new Date(1899, 11, 30);
-                                const date = new Date(excelEpoch.getTime() + rawValue * 24 * 60 * 60 * 1000);
-                                if (isValid(date)) {
-                                    parsedDate = date;
-                                }
                             } else {
                                 const dateStr = String(rawValue);
-                                // More robust parsing for various formats
-                                const supportedFormats = ["yyyy-MM-dd", "MM/dd/yyyy", 'M/d/yy', "yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd HH:mm:ss"];
-                                
-                                const isoDate = new Date(dateStr);
-                                if (isValid(isoDate) && (dateStr.includes('T') || /^\d{4}-\d{2}-\d{2}$/.test(dateStr))) {
-                                    parsedDate = isoDate;
+                                // Handle Excel serial date number if it's parsed as a number
+                                if (typeof rawValue === 'number' && rawValue > 1) {
+                                     const excelEpoch = new Date(1899, 11, 30);
+                                     const d = new Date(excelEpoch.getTime() + rawValue * 24 * 60 * 60 * 1000);
+                                     if (isValid(d)) {
+                                        parsedDate = d;
+                                     }
                                 } else {
+                                    // More robust parsing for various string formats
+                                    const supportedFormats = ["yyyy-MM-dd", "dd/MM/yyyy", "MM/dd/yyyy", 'M/d/yy', "yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd HH:mm:ss"];
+                                    
                                     for(const fmt of supportedFormats) {
                                         const d = parse(dateStr, fmt, new Date());
                                         if (isValid(d)) {
@@ -151,11 +148,12 @@ export function Step3Run() {
                             }
 
                             if (parsedDate) {
+                                // IMPORTANT: Correct for timezone issues and format to YYYY-MM-DD string
                                 const userTimezoneOffset = parsedDate.getTimezoneOffset() * 60000;
                                 const correctedDate = new Date(parsedDate.getTime() + userTimezoneOffset);
                                 parsedValue = format(correctedDate, 'yyyy-MM-dd');
                                 if (sqlCol.name === 'SalesDate') {
-                                  console.log(`Row ${excelRowNumber}: Preparing SalesDate with value:`, parsedValue);
+                                    console.log(`Row ${excelRowNumber}: Preparing SalesDate with value:`, parsedValue);
                                 }
                             } else {
                                 localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue), error: 'Invalid or unsupported date format.' });
@@ -193,8 +191,12 @@ export function Step3Run() {
 
 
   const startJob = useCallback(async () => {
-      if (validRows.length === 0) {
-          toast({ variant: "destructive", title: "No Valid Data", description: "There are no valid rows to process." });
+      if (validRows.length === 0 && !dryRunCompleted) {
+          toast({ variant: "destructive", title: "No Data", description: "Please run a validation (Dry Run) first to prepare the data." });
+          return;
+      }
+       if (validRows.length === 0 && dryRunCompleted) {
+          toast({ variant: "destructive", title: "No Valid Data", description: "There are no valid rows to process after validation." });
           setStatus('finished');
           return;
       }
@@ -202,10 +204,10 @@ export function Step3Run() {
       setStatus('running');
       setProgress(0);
       setIsDryRun(false);
-      setDryRunCompleted(false);
-
+      
       const jobBatchSize = parseInt(batchSize, 10) || 1000;
-      const numBatches = Math.ceil(validRows.length / jobBatchSize);
+      const totalRowsToProcess = validRows.length;
+      const numBatches = Math.ceil(totalRowsToProcess / jobBatchSize);
       
       let totalInserted = 0;
       let totalUpdated = 0;
@@ -225,16 +227,18 @@ export function Step3Run() {
               duplicateStrategy,
               strictMode: strictMode as 'tolerant' | 'strict',
               batchSize: currentBatch.length,
-              // Only send deleteAll on the first batch
               deleteAll: i === 0 ? deleteAll : false,
               primaryKey: (duplicateStrategy === 'skip' || duplicateStrategy === 'upsert') ? primaryKey : undefined,
           };
         
           const result = await runJob({ data: currentBatch, settings: jobSettings });
+          
+          if (result.success) {
+             totalInserted += result.inserted;
+             totalUpdated += result.updated;
+             totalSkipped += result.skipped;
+          }
 
-          totalInserted += result.inserted;
-          totalUpdated += result.updated;
-          totalSkipped += result.skipped;
           totalErrorCount += result.errorCount;
           if (result.errorDetails) {
             allJobErrors = [...allJobErrors, ...result.errorDetails];
@@ -243,13 +247,13 @@ export function Step3Run() {
           setProgress(Math.round(((i + 1) / numBatches) * 100));
 
           if (!result.success && strictMode === 'strict') {
-             toast({ variant: "destructive", title: "Strict Mode Error", description: "Job aborted due to an error in a batch." });
+             toast({ variant: "destructive", title: "Strict Mode Error", description: result.errorDetails?.[0]?.error || "Job aborted due to an error in a batch." });
              break; // Abort on strict mode failure
           }
         }
         
         setJobResult({
-            totalRows: validRows.length,
+            totalRows: totalRowsToProcess,
             inserted: totalInserted,
             updated: totalUpdated,
             skipped: totalSkipped,
@@ -259,28 +263,29 @@ export function Step3Run() {
 
         toast({
             title: "Job Complete",
-            description: `Inserted: ${totalInserted}, Updated: ${totalUpdated}, Errors: ${totalErrorCount}`,
+            description: `Processed ${totalRowsToProcess} rows. Inserted: ${totalInserted}, Updated: ${totalUpdated}, Errors: ${totalErrorCount}`,
         });
 
       } catch (e: any) {
+        const errorMessage = e.message || 'An unknown server error occurred.';
         setJobResult({
-            totalRows: validRows.length,
+            totalRows: totalRowsToProcess,
             inserted: totalInserted,
             updated: totalUpdated,
             skipped: totalSkipped,
-            errors: validRows.length - totalInserted - totalUpdated,
-            errorDetails: [{ row: 0, column: 'Job', value: 'N/A', error: e.message || 'An unknown server error occurred.' }],
+            errors: totalRowsToProcess - totalInserted - totalUpdated,
+            errorDetails: [{ row: 0, column: 'Job', value: 'N/A', error: errorMessage }],
         });
          toast({
             variant: "destructive",
             title: "Job Failed",
-            description: e.message || 'An unknown server error occurred.',
+            description: errorMessage,
         });
       } finally {
         setStatus('finished');
       }
 
-  }, [validRows, toast, columnMapping, duplicateStrategy, strictMode, batchSize, deleteAll, primaryKey]);
+  }, [validRows, toast, columnMapping, duplicateStrategy, strictMode, batchSize, deleteAll, primaryKey, dryRunCompleted]);
 
 
   const handleDryRun = async () => {
@@ -292,6 +297,7 @@ export function Step3Run() {
             title: "Configuration Error",
             description: "Please select a primary key for skip or upsert strategies.",
         });
+        setIsDryRun(false);
         return;
     }
 
@@ -301,15 +307,15 @@ export function Step3Run() {
 
     setJobResult({
         totalRows: excelData.length,
-        inserted: localValidRows.length,
+        inserted: localValidRows.length, // Represents valid rows in a dry run
         updated: 0,
-        skipped: 0,
+        skipped: 0, // Represents rows with errors in a dry run
         errors: localErrors.length,
         errorDetails: localErrors,
     });
     setStatus('finished');
     setDryRunCompleted(true);
-    toast({ title: "Validation Complete", description: `Found ${localErrors.length} errors in ${excelData.length} rows.` });
+    toast({ title: "Validation Complete", description: `Found ${localValidRows.length} valid rows and ${localErrors.length} errors.` });
   };
   
   const handleNewJob = () => {
@@ -340,7 +346,7 @@ export function Step3Run() {
                 <p className="text-sm text-muted-foreground">Total Rows</p>
               </div>
               <div className="p-4 bg-secondary rounded-lg">
-                <p className="text-2xl font-bold text-green-600">{jobResult.inserted}</p>
+                <p className="text-2xl font-bold text-green-600">{dryRunCompleted && isDryRun ? jobResult.inserted : jobResult.inserted}</p>
                 <p className="text-sm text-muted-foreground">{isDryRun ? 'Valid Rows' : 'Inserted'}</p>
               </div>
                <div className="p-4 bg-secondary rounded-lg">
@@ -393,9 +399,9 @@ export function Step3Run() {
                     <div className="space-y-4 p-4 border rounded-lg">
                         <h3 className="font-semibold flex items-center gap-2"><Info className="h-4 w-4" />Duplicate Handling</h3>
                         <RadioGroup value={duplicateStrategy} onValueChange={v => setDuplicateStrategy(v as any)}>
-                            <div className="flex items-center space-x-2"><RadioGroupItem value="insert_only" id="r1" /><Label htmlFor="r1">Insert all (no duplicate check)</Label></div>
-                            <div className="flex items-center space-x-2"><RadioGroupItem value="skip" id="r2" /><Label htmlFor="r2">Skip duplicates if they exist</Label></div>
-                            <div className="flex items-center space-x-2"><RadioGroupItem value="upsert" id="r3" /><Label htmlFor="r3">Update if exists, insert if not (Upsert)</Label></div>
+                            <div className="flex items-center space-x-2"><RadioGroupItem value="insert_only" id="r1" /><Label htmlFor="r1">Insert all (fastest, no duplicate check)</Label></div>
+                            <div className="flex items-center space-x-2"><RadioGroupItem value="skip" id="r2" disabled /><Label htmlFor="r2" className="text-muted-foreground">Skip duplicates (coming soon)</Label></div>
+                            <div className="flex items-center space-x-2"><RadioGroupItem value="upsert" id="r3" disabled /><Label htmlFor="r3" className="text-muted-foreground">Update if exists, insert if not (coming soon)</Label></div>
                         </RadioGroup>
                          {showPkSelector && (
                             <div className="pt-2">
@@ -423,7 +429,7 @@ export function Step3Run() {
                 <div>
                     <Label htmlFor="batch-size">Batch Size</Label>
                     <Input id="batch-size" type="number" value={batchSize} onChange={e => setBatchSize(e.target.value)} placeholder="e.g. 1000" />
-                    <p className="text-xs text-muted-foreground">Number of rows to insert per database transaction.</p>
+                    <p className="text-xs text-muted-foreground">Number of rows to insert per database transaction. Max 1000 for bulk insert.</p>
                 </div>
             </div>
         );
@@ -482,7 +488,7 @@ export function Step3Run() {
                     {status === 'validating' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
                     Validate (Dry Run)
                 </Button>
-                 <Button onClick={startJob} disabled={!dryRunCompleted} className="bg-gray-400 text-white" title="Complete a Dry Run first">
+                 <Button onClick={startJob} disabled={!dryRunCompleted || validRows.length === 0} className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white">
                     <CheckCircle className="mr-2 h-4 w-4" />
                     Start Real Job
                 </Button>
@@ -492,5 +498,3 @@ export function Step3Run() {
     </Card>
   );
 }
-
-    
