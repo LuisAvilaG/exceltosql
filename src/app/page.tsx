@@ -6,6 +6,7 @@ import { Header } from '@/components/layout/header';
 import { Step1Upload } from '@/components/steps/step1-upload';
 import { Step2Mapping } from '@/components/steps/step2-mapping';
 import { Step3Run } from '@/components/steps/step3-run';
+import { Step4JobReport } from '@/components/steps/step4-report';
 import { DataProvider, useDataContext } from '@/context/data-context';
 
 function HomePage() {
@@ -19,6 +20,8 @@ function HomePage() {
         return <Step2Mapping />;
       case 3:
         return <Step3Run />;
+      case 4:
+        return <Step4JobReport />;
       default:
         return <Step1Upload />;
     }

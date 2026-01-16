@@ -28,6 +28,15 @@ export type ErrorDetail = {
     error: string;
 };
 
+export type JobResult = {
+  totalRows: number;
+  inserted: number;
+  updated: number;
+  skipped: number;
+  errors: number;
+  errorDetails: ErrorDetail[];
+}
+
 export type ValidateDataOutput = {
   totalRows: number;
   validRows: number;
@@ -80,5 +89,11 @@ export type DataContextType = {
   setFileName: (name: string) => void;
   columnMapping: ColumnMapping;
   setColumnMapping: (mapping: ColumnMapping | ((prev: ColumnMapping) => ColumnMapping)) => void;
+  validRows: ExcelData[];
+  setValidRows: (rows: ExcelData[]) => void;
+  jobResult: JobResult | null;
+  setJobResult: (result: JobResult | null) => void;
+  isDryRun: boolean;
+  setIsDryRun: (isDryRun: boolean) => void;
   resetData: () => void;
 };

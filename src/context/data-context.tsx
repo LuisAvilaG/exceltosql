@@ -2,7 +2,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import type { ExcelData, ColumnMapping, DataContextType } from '@/lib/types';
+import type { ExcelData, ColumnMapping, DataContextType, JobResult } from '@/lib/types';
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
@@ -12,6 +12,9 @@ const initialState = {
     excelHeaders: [],
     fileName: '',
     columnMapping: {},
+    validRows: [],
+    jobResult: null,
+    isDryRun: false,
 };
 
 export function DataProvider({ children }: { children: ReactNode }) {
@@ -20,6 +23,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [excelHeaders, setExcelHeaders] = useState<string[]>(initialState.excelHeaders);
     const [fileName, setFileName] = useState(initialState.fileName);
     const [columnMapping, setColumnMapping] = useState<ColumnMapping>(initialState.columnMapping);
+    const [validRows, setValidRows] = useState<ExcelData[]>(initialState.validRows);
+    const [jobResult, setJobResult] = useState<JobResult | null>(initialState.jobResult);
+    const [isDryRun, setIsDryRun] = useState(initialState.isDryRun);
+
 
     const resetData = () => {
         setStep(initialState.step);
@@ -27,6 +34,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setExcelHeaders(initialState.excelHeaders);
         setFileName(initialState.fileName);
         setColumnMapping(initialState.columnMapping);
+        setValidRows(initialState.validRows);
+        setJobResult(initialState.jobResult);
+        setIsDryRun(initialState.isDryRun);
     };
 
     const value = {
@@ -40,6 +50,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setFileName,
         columnMapping,
         setColumnMapping,
+        validRows,
+        setValidRows,
+        jobResult,
+        setJobResult,
+        isDryRun,
+        setIsDryRun,
         resetData,
     };
 

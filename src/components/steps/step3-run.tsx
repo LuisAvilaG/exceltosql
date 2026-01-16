@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -16,16 +16,7 @@ import { ArrowLeft, Play, RefreshCw, Info, Trash2, Loader2, CheckCircle, AlertTr
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import type { ExcelData, ErrorDetail, RunJobInput } from '@/lib/types';
-import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { tableColumns, tableName } from '@/lib/schema';
@@ -35,28 +26,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useDataContext } from '@/context/data-context';
 
 type RunStatus = 'configuring' | 'validating' | 'running' | 'finished';
-type JobResult = {
-  totalRows: number;
-  inserted: number;
-  updated: number;
-  skipped: number;
-  errors: number;
-  errorDetails: ErrorDetail[];
-}
 
 const VALIDATION_BATCH_SIZE = 500; 
 
 export function Step3Run() {
-  const { fileName, excelData, columnMapping, setStep, resetData } = useDataContext();
+  const { excelData, columnMapping, setStep, resetData, setValidRows, setJobResult, setIsDryRun, validRows } = useDataContext();
   const { toast } = useToast();
   const [status, setStatus] = useState<RunStatus>('configuring');
   
   const [progress, setProgress] = useState(0);
-  const [errorDetails, setErrorDetails] = useState<ErrorDetail[]>([]);
-  const [validRows, setValidRows] = useState<ExcelData[]>([]);
-  const [jobResult, setJobResult] = useState<JobResult | null>(null);
   const [dryRunCompleted, setDryRunCompleted] = useState(false);
-  const [isDryRun, setIsDryRun] = useState(false);
 
   const [duplicateStrategy, setDuplicateStrategy] = useState<'insert_only' | 'skip' | 'upsert'>('insert_only');
   const [strictMode, setStrictMode] = useState<'tolerant' | 'strict'>('tolerant');
@@ -94,13 +73,7 @@ export function Step3Run() {
                       localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: String(rawValue ?? 'NULL'), error: `Required value is missing.` });
                       rowHasError = true;
                   } else {
-                      if (sqlCol.name === 'MeraAreaId') {
-                          parsedValue = null;
-                      } else if (sqlCol.type.startsWith('decimal') || sqlCol.type === 'int') {
-                          parsedValue = 0;
-                      } else {
-                          parsedValue = null;
-                      }
+                      parsedValue = null;
                   }
                 } else {
                     switch(sqlCol.type) {
@@ -121,33 +94,35 @@ export function Step3Run() {
                             }
                             break;
                         case 'datetime':
-                            const dateStr = String(rawValue).trim().split(' ')[0];
+                            const dateStr = String(rawValue).trim();
                             let finalDate: Date | null = null;
-                            let errorMessage = 'Invalid or unsupported date format.';
+                            let errorMessage = 'Invalid or unsupported date format. Supported: YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY, MM/DD/YY';
 
-                            if (dateStr.includes('/')) {
-                                const parts = dateStr.split('/');
-                                if (parts.length === 3) {
-                                    const yearPart = parts[2].length === 2 ? '20' + parts[2] : parts[2];
-                                    
-                                    // Try DD/MM/YYYY
-                                    let attempt1 = parse(`${parts[0]}/${parts[1]}/${yearPart}`, 'dd/MM/yyyy', new Date());
-                                    if (isValid(attempt1)) {
-                                        finalDate = attempt1;
-                                    } else {
-                                        // Try MM/DD/YYYY
-                                        let attempt2 = parse(`${parts[0]}/${parts[1]}/${yearPart}`, 'MM/dd/yyyy', new Date());
-                                        if (isValid(attempt2)) {
-                                          finalDate = attempt2;
-                                        }
-                                    }
-                                }
-                            } else if (dateStr.includes('-')) {
-                                // Try YYYY-MM-DD
-                                const attempt = parse(dateStr, 'yyyy-MM-dd', new Date());
-                                if (isValid(attempt)) {
-                                    finalDate = attempt;
-                                }
+                            if (typeof dateStr === 'string') {
+                              if (dateStr.includes('/')) {
+                                  const parts = dateStr.split('/');
+                                  if (parts.length === 3) {
+                                      const yearPart = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+                                      
+                                      // Attempt 1: DD/MM/YYYY
+                                      let attempt1 = parse(`${parts[0]}/${parts[1]}/${yearPart}`, 'dd/MM/yyyy', new Date());
+                                      if (isValid(attempt1)) {
+                                          finalDate = attempt1;
+                                      } else {
+                                          // Attempt 2: MM/DD/YYYY
+                                          let attempt2 = parse(`${parts[0]}/${parts[1]}/${yearPart}`, 'MM/dd/yyyy', new Date());
+                                          if (isValid(attempt2)) {
+                                            finalDate = attempt2;
+                                          }
+                                      }
+                                  }
+                              } else if (dateStr.includes('-')) {
+                                  // Attempt 3: YYYY-MM-DD
+                                  const attempt = parse(dateStr, 'yyyy-MM-dd', new Date());
+                                  if (isValid(attempt)) {
+                                      finalDate = attempt;
+                                  }
+                              }
                             }
                             
                             if (finalDate) {
@@ -182,11 +157,10 @@ export function Step3Run() {
           await new Promise(resolve => setTimeout(resolve, 0));
       }
 
-      setErrorDetails(localErrors);
       setValidRows(localValidRows);
       
       return { localErrors, localValidRows };
-  }, [excelData, columnMapping]);
+  }, [excelData, columnMapping, setValidRows]);
 
 
   const startJob = useCallback(async () => {
@@ -196,7 +170,15 @@ export function Step3Run() {
       }
        if (validRows.length === 0 && dryRunCompleted) {
           toast({ variant: "destructive", title: "No Valid Data", description: "There are no valid rows to process after validation." });
-          setStatus('finished');
+          setJobResult({
+              totalRows: excelData.length,
+              inserted: 0,
+              updated: 0,
+              skipped: 0,
+              errors: excelData.length,
+              errorDetails: [], // This will be populated by validation result
+          });
+          setStep(4);
           return;
       }
       
@@ -215,7 +197,6 @@ export function Step3Run() {
       let allJobErrors: ErrorDetail[] = [];
 
       try {
-        // First batch handles potential deletion
         if (numBatches > 0) {
             const firstBatch = validRows.slice(0, Math.min(jobBatchSize, totalRowsToProcess));
             const firstJobSettings: RunJobInput['settings'] = {
@@ -246,7 +227,6 @@ export function Step3Run() {
             }
         }
         
-        // Subsequent batches
         for (let i = 1; i < numBatches; i++) {
           const batchStart = i * jobBatchSize;
           const batchEnd = batchStart + jobBatchSize;
@@ -258,7 +238,7 @@ export function Step3Run() {
               duplicateStrategy,
               strictMode: strictMode as 'tolerant' | 'strict',
               batchSize: currentBatch.length,
-              deleteAll: false, // only first batch can delete
+              deleteAll: false,
               primaryKey: (duplicateStrategy === 'skip' || duplicateStrategy === 'upsert') ? primaryKey : undefined,
           };
         
@@ -313,9 +293,10 @@ export function Step3Run() {
         });
       } finally {
         setStatus('finished');
+        setStep(4);
       }
 
-  }, [validRows, toast, columnMapping, duplicateStrategy, strictMode, batchSize, deleteAll, primaryKey, dryRunCompleted]);
+  }, [validRows, toast, columnMapping, duplicateStrategy, strictMode, batchSize, deleteAll, primaryKey, dryRunCompleted, excelData.length, setJobResult, setStep, setIsDryRun]);
 
 
   const handleDryRun = async () => {
@@ -346,17 +327,11 @@ export function Step3Run() {
     setStatus('finished');
     setDryRunCompleted(true);
     toast({ title: "Validation Complete", description: `Found ${localValidRows.length} valid rows and ${localErrors.length} errors.` });
+    setStep(4);
   };
-  
-  const handleNewJob = () => {
-      resetData();
-      setStep(1);
-  }
 
   const renderContent = () => {
-    switch (status) {
-      case 'validating':
-      case 'running':
+    if (status === 'validating' || status === 'running') {
         return (
           <div className="flex flex-col items-center justify-center gap-4 p-8">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -367,110 +342,65 @@ export function Step3Run() {
             </div>
           </div>
         );
-      case 'finished':
-        return jobResult && (
-          <div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center mb-6">
-              <div className="p-4 bg-secondary rounded-lg">
-                <p className="text-2xl font-bold">{jobResult.totalRows}</p>
-                <p className="text-sm text-muted-foreground">Total Rows</p>
-              </div>
-              <div className="p-4 bg-secondary rounded-lg">
-                <p className="text-2xl font-bold text-green-600">{dryRunCompleted && isDryRun ? jobResult.inserted : jobResult.inserted}</p>
-                <p className="text-sm text-muted-foreground">{isDryRun ? 'Valid Rows' : 'Inserted'}</p>
-              </div>
-               <div className="p-4 bg-secondary rounded-lg">
-                <p className="text-2xl font-bold text-blue-600">{jobResult.updated}</p>
-                <p className="text-sm text-muted-foreground">Updated</p>
-              </div>
-              <div className="p-4 bg-secondary rounded-lg">
-                <p className="text-2xl font-bold text-destructive">{jobResult.errors}</p>
-                <p className="text-sm text-muted-foreground">Rows with Errors</p>              </div>
-            </div>
-            {jobResult.errors > 0 && (
-              <div>
-                <h3 className="font-semibold mb-2">Error Details (first 100 shown)</h3>
-                <div className="h-60 overflow-auto border rounded-lg">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Row (Excel)</TableHead><TableHead>Column</TableHead><TableHead>Value</TableHead><TableHead>Error Reason</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {jobResult.errorDetails.slice(0, 100).map((err, i) => (
-                        <TableRow key={i}>
-                          <TableCell>{err.row}</TableCell><TableCell>{err.column}</TableCell><TableCell><Badge variant="destructive" className="max-w-xs truncate">{String(err.value)}</Badge></TableCell><TableCell>{err.error}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      case 'configuring':
-      default:
-        const showPkSelector = duplicateStrategy === 'skip' || duplicateStrategy === 'upsert';
-        return (
-            <div className="space-y-6">
-                <div className="space-y-4 p-4 border rounded-lg bg-destructive/10 border-destructive">
-                    <h3 className="font-semibold flex items-center gap-2"><Trash2 className="h-4 w-4" />Pre-Import Actions</h3>
-                    <div className="flex items-center space-x-2">
-                        <Checkbox id="delete-all" checked={deleteAll} onCheckedChange={(checked) => setDeleteAll(!!checked)} />
-                        <Label htmlFor="delete-all">Delete all existing data from the `{tableName}` table before import.</Label>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                        Warning: This action is irreversible and will permanently delete all data in the target table.
-                    </p>
-                </div>
-                <div className="grid md:grid-cols-2 gap-6">
-                    <div className="space-y-4 p-4 border rounded-lg">
-                        <h3 className="font-semibold flex items-center gap-2"><Info className="h-4 w-4" />Duplicate Handling</h3>
-                        <RadioGroup value={duplicateStrategy} onValueChange={v => setDuplicateStrategy(v as any)}>
-                            <div className="flex items-center space-x-2"><RadioGroupItem value="insert_only" id="r1" /><Label htmlFor="r1">Insert all (fastest, no duplicate check)</Label></div>
-                            <div className="flex items-center space-x-2"><RadioGroupItem value="skip" id="r2" disabled /><Label htmlFor="r2" className="text-muted-foreground">Skip duplicates (coming soon)</Label></div>
-                            <div className="flex items-center space-x-2"><RadioGroupItem value="upsert" id="r3" disabled /><Label htmlFor="r3" className="text-muted-foreground">Update if exists, insert if not (coming soon)</Label></div>
-                        </RadioGroup>
-                         {showPkSelector && (
-                            <div className="pt-2">
-                                <Label htmlFor="primary-key">Primary Key for Duplicates</Label>
-                                <Select onValueChange={setPrimaryKey} value={primaryKey}>
-                                    <SelectTrigger id="primary-key"><SelectValue placeholder="Select a key..." /></SelectTrigger>
-                                    <SelectContent>
-                                        {Object.keys(columnMapping).filter(k => columnMapping[k]).map(key => (
-                                            <SelectItem key={key} value={key}>{key}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <p className="text-xs text-muted-foreground mt-1">Select the column that uniquely identifies a row.</p>
-                            </div>
-                        )}
-                    </div>
-                    <div className="space-y-4 p-4 border rounded-lg">
-                        <h3 className="font-semibold flex items-center gap-2"><AlertTriangle className="h-4 w-4" />Error Handling</h3>
-                        <RadioGroup value={strictMode} onValueChange={v => setStrictMode(v as any)}>
-                            <div className="flex items-center space-x-2"><RadioGroupItem value="tolerant" id="r4" /><Label htmlFor="r4">Tolerant: Insert valid rows, report errors</Label></div>
-                            <div className="flex items-center space-x-2"><RadioGroupItem value="strict" id="r5" /><Label htmlFor="r5">If one error occurs, abort the entire job</Label></div>
-                        </RadioGroup>
-                    </div>
-                </div>
-                <div>
-                    <Label htmlFor="batch-size">Batch Size</Label>
-                    <Input id="batch-size" type="number" value={batchSize} onChange={e => setBatchSize(e.target.value)} placeholder="e.g. 1000" />
-                    <p className="text-xs text-muted-foreground">Number of rows to insert per database transaction. Max 1000 for bulk insert.</p>
-                </div>
-            </div>
-        );
     }
+
+    const showPkSelector = duplicateStrategy === 'skip' || duplicateStrategy === 'upsert';
+    return (
+        <div className="space-y-6">
+            <div className="space-y-4 p-4 border rounded-lg bg-destructive/10 border-destructive">
+                <h3 className="font-semibold flex items-center gap-2"><Trash2 className="h-4 w-4" />Pre-Import Actions</h3>
+                <div className="flex items-center space-x-2">
+                    <Checkbox id="delete-all" checked={deleteAll} onCheckedChange={(checked) => setDeleteAll(!!checked)} />
+                    <Label htmlFor="delete-all">Delete all existing data from the `{tableName}` table before import.</Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                    Warning: This action is irreversible and will permanently delete all data in the target table.
+                </p>
+            </div>
+            <div className="grid md:grid-cols-2 gap-6">
+                <div className="space-y-4 p-4 border rounded-lg">
+                    <h3 className="font-semibold flex items-center gap-2"><Info className="h-4 w-4" />Duplicate Handling</h3>
+                    <RadioGroup value={duplicateStrategy} onValueChange={v => setDuplicateStrategy(v as any)}>
+                        <div className="flex items-center space-x-2"><RadioGroupItem value="insert_only" id="r1" /><Label htmlFor="r1">Insert all (fastest, no duplicate check)</Label></div>
+                        <div className="flex items-center space-x-2"><RadioGroupItem value="skip" id="r2" disabled /><Label htmlFor="r2" className="text-muted-foreground">Skip duplicates (coming soon)</Label></div>
+                        <div className="flex items-center space-x-2"><RadioGroupItem value="upsert" id="r3" disabled /><Label htmlFor="r3" className="text-muted-foreground">Update if exists, insert if not (coming soon)</Label></div>
+                    </RadioGroup>
+                     {showPkSelector && (
+                        <div className="pt-2">
+                            <Label htmlFor="primary-key">Primary Key for Duplicates</Label>
+                            <Select onValueChange={setPrimaryKey} value={primaryKey}>
+                                <SelectTrigger id="primary-key"><SelectValue placeholder="Select a key..." /></SelectTrigger>
+                                <SelectContent>
+                                    {Object.keys(columnMapping).filter(k => columnMapping[k]).map(key => (
+                                        <SelectItem key={key} value={key}>{key}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground mt-1">Select the column that uniquely identifies a row.</p>
+                        </div>
+                    )}
+                </div>
+                <div className="space-y-4 p-4 border rounded-lg">
+                    <h3 className="font-semibold flex items-center gap-2"><AlertTriangle className="h-4 w-4" />Error Handling</h3>
+                    <RadioGroup value={strictMode} onValueChange={v => setStrictMode(v as any)}>
+                        <div className="flex items-center space-x-2"><RadioGroupItem value="tolerant" id="r4" /><Label htmlFor="r4">Tolerant: Insert valid rows, report errors</Label></div>
+                        <div className="flex items-center space-x-2"><RadioGroupItem value="strict" id="r5" /><Label htmlFor="r5">If one error occurs, abort the entire job</Label></div>
+                    </RadioGroup>
+                </div>
+            </div>
+            <div>
+                <Label htmlFor="batch-size">Batch Size</Label>
+                <Input id="batch-size" type="number" value={batchSize} onChange={e => setBatchSize(e.target.value)} placeholder="e.g. 1000" />
+                <p className="text-xs text-muted-foreground">Number of rows to insert per database transaction. Max 1000 for bulk insert.</p>
+            </div>
+        </div>
+    );
   };
 
  const getTitle = () => {
     switch (status) {
         case 'validating': return 'Validating Data...';
         case 'running': return 'Running Job...';
-        case 'finished': return isDryRun ? 'Validation Complete' : 'Job Complete';
         default: return 'Configuration and Execution';
     }
  };
@@ -479,7 +409,6 @@ export function Step3Run() {
      switch (status) {
         case 'validating': return `Checking ${excelData.length} rows for errors before processing.`;
         case 'running': return `Inserting data into ${tableName}. This may take a moment.`;
-        case 'finished': return `Results for the job on file ${fileName}.`;
         default: return 'Define the final details and start the data load to SQL Server.';
     }
  };
@@ -499,31 +428,16 @@ export function Step3Run() {
           Back
         </Button>
         
-        {status === 'finished' ? (
-             <div className="flex gap-2">
-                <Button onClick={handleNewJob}>
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Start New Job
-                </Button>
-                {dryRunCompleted && (
-                  <Button onClick={startJob} disabled={status === 'running' || status === 'validating' || validRows.length === 0} className="bg-green-600 text-white hover:bg-green-700">
-                      {status === 'running' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
-                      Start Real Job
-                  </Button>
-                )}
-            </div>
-        ) : (
-            <div className="flex gap-2">
-                <Button variant="outline" onClick={handleDryRun} disabled={status === 'running' || status === 'validating'}>
-                    {status === 'validating' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-                    Validate (Dry Run)
-                </Button>
-                 <Button onClick={startJob} disabled={!dryRunCompleted || validRows.length === 0} className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white">
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    Start Real Job
-                </Button>
-            </div>
-        )}
+        <div className="flex gap-2">
+            <Button variant="outline" onClick={handleDryRun} disabled={status === 'running' || status === 'validating'}>
+                {status === 'validating' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                Validate (Dry Run)
+            </Button>
+             <Button onClick={startJob} disabled={!dryRunCompleted || validRows.length === 0} className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white">
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Start Real Job
+            </Button>
+        </div>
       </CardFooter>
     </Card>
   );
