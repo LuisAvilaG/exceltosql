@@ -15,6 +15,7 @@ const initialState = {
     validRows: [],
     jobResult: null,
     isDryRun: false,
+    lastRunFingerprints: new Set<string>(),
 };
 
 export function DataProvider({ children }: { children: ReactNode }) {
@@ -26,6 +27,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [validRows, setValidRows] = useState<ExcelData[]>(initialState.validRows);
     const [jobResult, setJobResult] = useState<JobResult | null>(initialState.jobResult);
     const [isDryRun, setIsDryRun] = useState(initialState.isDryRun);
+    const [lastRunFingerprints, setLastRunFingerprints] = useState<Set<string>>(initialState.lastRunFingerprints);
 
 
     const resetData = () => {
@@ -37,6 +39,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setValidRows(initialState.validRows);
         setJobResult(initialState.jobResult);
         setIsDryRun(initialState.isDryRun);
+        setLastRunFingerprints(initialState.lastRunFingerprints);
     };
 
     const value = {
@@ -56,6 +59,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setJobResult,
         isDryRun,
         setIsDryRun,
+        lastRunFingerprints,
+        setLastRunFingerprints,
         resetData,
     };
 

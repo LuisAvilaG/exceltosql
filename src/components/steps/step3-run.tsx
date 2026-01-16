@@ -30,12 +30,13 @@ type RunStatus = 'configuring' | 'validating' | 'running' | 'finished';
 const VALIDATION_BATCH_SIZE = 500; 
 
 export function Step3Run() {
-  const { excelData, columnMapping, setStep, resetData, setValidRows, setJobResult, setIsDryRun, validRows } = useDataContext();
+  const { excelData, columnMapping, setStep, setJobResult, setIsDryRun, setValidRows, setLastRunFingerprints } = useDataContext();
   const { toast } = useToast();
   const [status, setStatus] = useState<RunStatus>('configuring');
   
   const [progress, setProgress] = useState(0);
   const [dryRunCompleted, setDryRunCompleted] = useState(false);
+  const [currentValidRows, setCurrentValidRows] = useState<ExcelData[]>([]);
 
   const [duplicateStrategy, setDuplicateStrategy] = useState<'insert_only' | 'skip' | 'upsert'>('insert_only');
   const [strictMode, setStrictMode] = useState<'tolerant' | 'strict'>('tolerant');
@@ -96,33 +97,33 @@ export function Step3Run() {
                         case 'datetime':
                             const dateStr = String(rawValue).trim();
                             let finalDate: Date | null = null;
-                            let errorMessage = 'Invalid or unsupported date format. Supported: YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY, MM/DD/YY';
+                            let errorMessage = 'Invalid or unsupported date format. Supported formats: DD/MM/YYYY, MM/DD/YYYY, MM/DD/YY, YYYY-MM-DD';
 
                             if (typeof dateStr === 'string') {
-                              if (dateStr.includes('/')) {
-                                  const parts = dateStr.split('/');
-                                  if (parts.length === 3) {
-                                      const yearPart = parts[2].length === 2 ? '20' + parts[2] : parts[2];
-                                      
-                                      // Attempt 1: DD/MM/YYYY
-                                      let attempt1 = parse(`${parts[0]}/${parts[1]}/${yearPart}`, 'dd/MM/yyyy', new Date());
-                                      if (isValid(attempt1)) {
-                                          finalDate = attempt1;
-                                      } else {
-                                          // Attempt 2: MM/DD/YYYY
-                                          let attempt2 = parse(`${parts[0]}/${parts[1]}/${yearPart}`, 'MM/dd/yyyy', new Date());
-                                          if (isValid(attempt2)) {
-                                            finalDate = attempt2;
-                                          }
-                                      }
-                                  }
-                              } else if (dateStr.includes('-')) {
-                                  // Attempt 3: YYYY-MM-DD
-                                  const attempt = parse(dateStr, 'yyyy-MM-dd', new Date());
-                                  if (isValid(attempt)) {
-                                      finalDate = attempt;
-                                  }
-                              }
+                                if (dateStr.includes('/')) {
+                                    const parts = dateStr.split('/');
+                                    if (parts.length === 3) {
+                                        const yearPart = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+                                        
+                                        // Attempt 1: DD/MM/YYYY
+                                        let attempt1 = parse(`${parts[0]}/${parts[1]}/${yearPart}`, 'dd/MM/yyyy', new Date());
+                                        if (isValid(attempt1)) {
+                                            finalDate = attempt1;
+                                        } else {
+                                            // Attempt 2: MM/DD/YYYY or MM/DD/YY
+                                            let attempt2 = parse(`${parts[0]}/${parts[1]}/${yearPart}`, 'MM/dd/yyyy', new Date());
+                                            if (isValid(attempt2)) {
+                                                finalDate = attempt2;
+                                            }
+                                        }
+                                    }
+                                } else if (dateStr.includes('-')) {
+                                    // Attempt 3: YYYY-MM-DD
+                                    const attempt = parse(dateStr, 'yyyy-MM-dd', new Date());
+                                    if (isValid(attempt)) {
+                                        finalDate = attempt;
+                                    }
+                                }
                             }
                             
                             if (finalDate) {
@@ -158,17 +159,29 @@ export function Step3Run() {
       }
 
       setValidRows(localValidRows);
+      setCurrentValidRows(localValidRows);
       
       return { localErrors, localValidRows };
   }, [excelData, columnMapping, setValidRows]);
 
+  // Generate fingerprints for recently processed rows
+  const generateFingerprints = (rows: ExcelData[]) => {
+      const fingerprints = new Set<string>();
+      rows.forEach(row => {
+          // Create a consistent, unique string for each row
+          const key = `${row.SalesDate}|${row.MeraLocationId}|${row.MeraRevenueCenterId}|${row.Sales}`;
+          fingerprints.add(key);
+      });
+      setLastRunFingerprints(fingerprints);
+  };
+
 
   const startJob = useCallback(async () => {
-      if (validRows.length === 0 && !dryRunCompleted) {
+      if (currentValidRows.length === 0 && !dryRunCompleted) {
           toast({ variant: "destructive", title: "No Data", description: "Please run a validation (Dry Run) first to prepare the data." });
           return;
       }
-       if (validRows.length === 0 && dryRunCompleted) {
+       if (currentValidRows.length === 0 && dryRunCompleted) {
           toast({ variant: "destructive", title: "No Valid Data", description: "There are no valid rows to process after validation." });
           setJobResult({
               totalRows: excelData.length,
@@ -187,7 +200,7 @@ export function Step3Run() {
       setIsDryRun(false);
       
       const jobBatchSize = parseInt(batchSize, 10) || 1000;
-      const totalRowsToProcess = validRows.length;
+      const totalRowsToProcess = currentValidRows.length;
       const numBatches = Math.ceil(totalRowsToProcess / jobBatchSize);
       
       let totalInserted = 0;
@@ -195,10 +208,11 @@ export function Step3Run() {
       let totalSkipped = 0;
       let totalErrorCount = 0;
       let allJobErrors: ErrorDetail[] = [];
+      let successfullyInsertedRows: ExcelData[] = [];
 
       try {
         if (numBatches > 0) {
-            const firstBatch = validRows.slice(0, Math.min(jobBatchSize, totalRowsToProcess));
+            const firstBatch = currentValidRows.slice(0, Math.min(jobBatchSize, totalRowsToProcess));
             const firstJobSettings: RunJobInput['settings'] = {
                 tableName,
                 columnMapping,
@@ -213,6 +227,7 @@ export function Step3Run() {
 
             if (result.success) {
                 totalInserted += result.inserted;
+                successfullyInsertedRows.push(...firstBatch.slice(0, result.inserted));
                 totalUpdated += result.updated;
                 totalSkipped += result.skipped;
             }
@@ -230,7 +245,7 @@ export function Step3Run() {
         for (let i = 1; i < numBatches; i++) {
           const batchStart = i * jobBatchSize;
           const batchEnd = batchStart + jobBatchSize;
-          const currentBatch = validRows.slice(batchStart, batchEnd);
+          const currentBatch = currentValidRows.slice(batchStart, batchEnd);
 
           const jobSettings: RunJobInput['settings'] = {
               tableName,
@@ -246,6 +261,7 @@ export function Step3Run() {
           
           if (result.success) {
              totalInserted += result.inserted;
+             successfullyInsertedRows.push(...currentBatch.slice(0, result.inserted));
              totalUpdated += result.updated;
              totalSkipped += result.skipped;
           }
@@ -270,6 +286,8 @@ export function Step3Run() {
             errors: totalErrorCount,
             errorDetails: allJobErrors,
         });
+
+        generateFingerprints(successfullyInsertedRows);
 
         toast({
             title: "Job Complete",
@@ -296,7 +314,7 @@ export function Step3Run() {
         setStep(4);
       }
 
-  }, [validRows, toast, columnMapping, duplicateStrategy, strictMode, batchSize, deleteAll, primaryKey, dryRunCompleted, excelData.length, setJobResult, setStep, setIsDryRun]);
+  }, [currentValidRows, toast, columnMapping, duplicateStrategy, strictMode, batchSize, deleteAll, primaryKey, dryRunCompleted, excelData.length, setJobResult, setStep, setIsDryRun, setLastRunFingerprints]);
 
 
   const handleDryRun = async () => {
@@ -324,6 +342,9 @@ export function Step3Run() {
         errors: localErrors.length,
         errorDetails: localErrors,
     });
+    
+    generateFingerprints(localValidRows);
+    
     setStatus('finished');
     setDryRunCompleted(true);
     toast({ title: "Validation Complete", description: `Found ${localValidRows.length} valid rows and ${localErrors.length} errors.` });
@@ -413,6 +434,17 @@ export function Step3Run() {
     }
  };
 
+ useEffect(() => {
+    // When component mounts or excelData changes, if not running a job, complete the validation for the dryRunCompleted check
+    if (status === 'configuring' && excelData.length > 0) {
+      validateData().then(() => {
+        setDryRunCompleted(true);
+        setStatus('configuring'); // Reset status after auto-validation
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only on mount
+
   return (
     <Card>
       <CardHeader>
@@ -433,7 +465,7 @@ export function Step3Run() {
                 {status === 'validating' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
                 Validate (Dry Run)
             </Button>
-             <Button onClick={startJob} disabled={!dryRunCompleted || validRows.length === 0} className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white">
+             <Button onClick={startJob} disabled={!dryRunCompleted || currentValidRows.length === 0} className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white">
                 <CheckCircle className="mr-2 h-4 w-4" />
                 Start Real Job
             </Button>

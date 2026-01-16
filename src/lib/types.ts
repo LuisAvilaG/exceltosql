@@ -46,7 +46,7 @@ export type ValidateDataOutput = {
 };
 
 
-// Schemas moved from run-job-flow.ts
+// Schemas for run-job-flow.ts
 const RunJobSettingsSchema = z.object({
   tableName: z.string(),
   columnMapping: z.record(z.string(), z.string().nullable()),
@@ -78,6 +78,28 @@ export const RunJobOutputSchema = z.object({
 });
 export type RunJobOutput = z.infer<typeof RunJobOutputSchema>;
 
+
+// Schemas for view-data-flow.ts
+export const ViewDataInputSchema = z.object({
+    page: z.number().int().positive(),
+    rowsPerPage: z.number().int().positive(),
+    filters: z.record(z.string(), z.any()).optional(),
+    dateRange: z.object({
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+    }).optional(),
+    sortBy: z.string(),
+    sortOrder: z.enum(['asc', 'desc']),
+});
+export type ViewDataInput = z.infer<typeof ViewDataInputSchema>;
+
+export const ViewDataOutputSchema = z.object({
+    rows: z.array(z.record(z.any())),
+    totalCount: z.number().int(),
+});
+export type ViewDataOutput = z.infer<typeof ViewDataOutputSchema>;
+
+
 export type DataContextType = {
   step: number;
   setStep: (step: number) => void;
@@ -95,5 +117,7 @@ export type DataContextType = {
   setJobResult: (result: JobResult | null) => void;
   isDryRun: boolean;
   setIsDryRun: (isDryRun: boolean) => void;
+  lastRunFingerprints: Set<string>;
+  setLastRunFingerprints: (fingerprints: Set<string>) => void;
   resetData: () => void;
 };

@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -18,82 +18,96 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { RefreshCw, Search } from 'lucide-react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { RefreshCw, Search, SlidersHorizontal, Loader2, CalendarIcon } from 'lucide-react';
 import { useDataContext } from '@/context/data-context';
-import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
+import { tableColumns } from '@/lib/schema';
+import type { ExcelData } from '@/lib/types';
+import { viewData } from '@/ai/flows/view-data-flow';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Calendar } from '../ui/calendar';
+import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
+import { Label } from '../ui/label';
 
 const ROWS_PER_PAGE = 50;
 
+const filterableColumns = tableColumns.filter(c => !c.isIdentity).map(c => c.name);
+
+type Filters = {
+    [key: string]: any;
+    SalesDate: {
+        startDate: Date | undefined;
+        endDate: Date | undefined;
+    }
+}
+
 export function Step4JobReport() {
-  const { jobResult, validRows, fileName, isDryRun, setStep, resetData } = useDataContext();
+  const { lastRunFingerprints, setStep, resetData } = useDataContext();
   
-  const [activeTab, setActiveTab] = useState('success');
-  const [successPage, setSuccessPage] = useState(1);
-  const [errorPage, setErrorPage] = useState(1);
-  const [filter, setFilter] = useState('');
+  const [data, setData] = useState<ExcelData[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
+  const [filters, setFilters] = useState<Filters>({ SalesDate: { startDate: undefined, endDate: undefined } });
+  const [appliedFilters, setAppliedFilters] = useState({});
 
-  const filteredSuccessRows = useMemo(() => {
-    if (!filter) return validRows;
-    return validRows.filter(row => 
-      Object.values(row).some(value => 
-        String(value).toLowerCase().includes(filter.toLowerCase())
-      )
-    );
-  }, [validRows, filter]);
+  const fetchAndSetData = useCallback(async () => {
+    setIsLoading(true);
+    const viewDataInput = {
+      page: currentPage,
+      rowsPerPage: ROWS_PER_PAGE,
+      filters: Object.fromEntries(Object.entries(appliedFilters).filter(([key, value]) => key !== 'SalesDate')),
+      dateRange: (appliedFilters as any).SalesDate,
+      sortBy: 'SalesDate',
+      sortOrder: 'desc' as 'desc',
+    };
+    const result = await viewData(viewDataInput);
+    setData(result.rows);
+    setTotalCount(result.totalCount);
+    setIsLoading(false);
+  }, [currentPage, appliedFilters]);
 
-  const filteredErrorRows = useMemo(() => {
-    if (!jobResult?.errorDetails) return [];
-    if (!filter) return jobResult.errorDetails;
-    return jobResult.errorDetails.filter(err => 
-        (String(err.row).toLowerCase().includes(filter.toLowerCase())) ||
-        (err.column.toLowerCase().includes(filter.toLowerCase())) ||
-        (String(err.value).toLowerCase().includes(filter.toLowerCase())) ||
-        (err.error.toLowerCase().includes(filter.toLowerCase()))
-    );
-  }, [jobResult?.errorDetails, filter]);
+  useEffect(() => {
+    fetchAndSetData();
+  }, [fetchAndSetData]);
 
-  const successPages = Math.ceil(filteredSuccessRows.length / ROWS_PER_PAGE);
-  const currentSuccessData = filteredSuccessRows.slice((successPage - 1) * ROWS_PER_PAGE, successPage * ROWS_PER_PAGE);
+  const handleApplyFilters = () => {
+      setCurrentPage(1);
+      setAppliedFilters(filters);
+  };
   
-  const errorPages = jobResult ? Math.ceil(filteredErrorRows.length / ROWS_PER_PAGE) : 0;
-  const currentErrorData = filteredErrorRows.slice((errorPage - 1) * ROWS_PER_PAGE, errorPage * ROWS_PER_PAGE);
-  
+  const handleClearFilters = () => {
+      const cleared = { SalesDate: { startDate: undefined, endDate: undefined } };
+      setFilters(cleared);
+      setCurrentPage(1);
+      setAppliedFilters(cleared);
+  };
+
   const handleNewJob = () => {
     resetData();
     setStep(1);
   };
-  
-  if (!jobResult) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>No Job Data</CardTitle>
-          <CardDescription>
-            No job has been run yet. Please go back and upload a file.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button onClick={handleNewJob}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Start New Job
-          </Button>
-        </CardContent>
-      </Card>
-    );
+
+  const handleFilterChange = (column: string, value: any) => {
+      setFilters(prev => ({ ...prev, [column]: value }));
+  };
+
+  const getRowFingerprint = (row: ExcelData) => {
+    return `${row.SalesDate}|${row.MeraLocationId}|${row.MeraRevenueCenterId}|${row.Sales}`;
   }
-  
-  const successHeaders = validRows.length > 0 ? Object.keys(validRows[0]) : [];
+
+  const totalPages = Math.ceil(totalCount / ROWS_PER_PAGE);
 
   return (
     <Card>
       <CardHeader>
         <div className="flex justify-between items-start">
             <div>
-                <CardTitle>{isDryRun ? 'Validation Report' : 'Job Execution Report'}</CardTitle>
+                <CardTitle>Live Data Viewer</CardTitle>
                 <CardDescription>
-                Results for the job on file <span className="font-semibold text-primary">{fileName}</span>.
+                Browse, filter, and validate data directly from the database. Rows from the last job are highlighted.
                 </CardDescription>
             </div>
             <Button onClick={handleNewJob}>
@@ -103,92 +117,110 @@ export function Step4JobReport() {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center mb-6">
-          <div className="p-4 bg-secondary rounded-lg">
-            <p className="text-2xl font-bold">{jobResult.totalRows}</p>
-            <p className="text-sm text-muted-foreground">Total Rows in File</p>
-          </div>
-          <div className="p-4 bg-secondary rounded-lg">
-            <p className="text-2xl font-bold text-green-600">{jobResult.inserted}</p>
-            <p className="text-sm text-muted-foreground">{isDryRun ? 'Valid Rows' : 'Rows Inserted'}</p>
-          </div>
-          <div className="p-4 bg-secondary rounded-lg">
-            <p className="text-2xl font-bold text-blue-600">{jobResult.updated}</p>
-            <p className="text-sm text-muted-foreground">Rows Updated</p>
-          </div>
-          <div className="p-4 bg-secondary rounded-lg">
-            <p className="text-2xl font-bold text-destructive">{jobResult.errors}</p>
-            <p className="text-sm text-muted-foreground">Rows with Errors</p>
-          </div>
-        </div>
+          <Accordion type="single" collapsible className="mb-4">
+              <AccordionItem value="filters">
+                  <AccordionTrigger>
+                      <h3 className="font-semibold flex items-center gap-2"><SlidersHorizontal className="h-4 w-4" /> Filters</h3>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4">
+                          {/* Date Range Filter */}
+                          <div className="space-y-2">
+                             <Label>Sales Date Range</Label>
+                             <Popover>
+                                <PopoverTrigger asChild>
+                                <Button
+                                    id="date"
+                                    variant={"outline"}
+                                    className={cn(
+                                    "w-full justify-start text-left font-normal",
+                                    !filters.SalesDate.startDate && "text-muted-foreground"
+                                    )}
+                                >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {filters.SalesDate.startDate ? (
+                                    filters.SalesDate.endDate ? (
+                                        <>
+                                        {format(filters.SalesDate.startDate, "LLL dd, y")} -{" "}
+                                        {format(filters.SalesDate.endDate, "LLL dd, y")}
+                                        </>
+                                    ) : (
+                                        format(filters.SalesDate.startDate, "LLL dd, y")
+                                    )
+                                    ) : (
+                                    <span>Pick a date range</span>
+                                    )}
+                                </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar
+                                    initialFocus
+                                    mode="range"
+                                    defaultMonth={filters.SalesDate.startDate}
+                                    selected={{from: filters.SalesDate.startDate, to: filters.SalesDate.endDate}}
+                                    onSelect={(range) => handleFilterChange('SalesDate', {startDate: range?.from, endDate: range?.to})}
+                                    numberOfMonths={2}
+                                />
+                                </PopoverContent>
+                            </Popover>
+                          </div>
+                          
+                          {/* Column Filters */}
+                          {filterableColumns.filter(c => c !== 'SalesDate').map(colName => (
+                              <div key={colName} className="space-y-2">
+                                  <Label htmlFor={`filter-${colName}`}>{colName}</Label>
+                                  <Input 
+                                      id={`filter-${colName}`}
+                                      placeholder={`Filter by ${colName}...`}
+                                      value={filters[colName] || ''}
+                                      onChange={(e) => handleFilterChange(colName, e.target.value)}
+                                  />
+                              </div>
+                          ))}
+                      </div>
+                      <div className="flex justify-end gap-2 px-4 pb-2">
+                          <Button variant="ghost" onClick={handleClearFilters}>Clear</Button>
+                          <Button onClick={handleApplyFilters}>
+                              <Search className="mr-2 h-4 w-4" />
+                              Apply Filters
+                          </Button>
+                      </div>
+                  </AccordionContent>
+              </AccordionItem>
+          </Accordion>
         
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <div className="flex justify-between items-center mb-4">
-            <TabsList>
-              <TabsTrigger value="success">
-                {isDryRun ? 'Valid Rows' : 'Successfully Processed Rows'} ({jobResult.inserted})
-              </TabsTrigger>
-              <TabsTrigger value="errors">
-                Rows with Errors ({jobResult.errors})
-              </TabsTrigger>
-            </TabsList>
-            <div className="w-full max-w-sm ml-4 relative">
-                <Input placeholder="Search in this tab..." value={filter} onChange={(e) => setFilter(e.target.value)} className="pl-10" />
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-            </div>
-          </div>
-          
-          <TabsContent value="success">
-            <div className="h-96 overflow-auto border rounded-lg">
+            <div className="min-h-[400px] overflow-auto border rounded-lg relative">
+              {isLoading && (
+                  <div className="absolute inset-0 bg-background/80 flex items-center justify-center">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+              )}
               <Table>
                 <TableHeader className="sticky top-0 bg-card">
                   <TableRow>
-                    {successHeaders.map((header) => <TableHead key={header}>{header}</TableHead>)}
+                    {tableColumns.map((header) => <TableHead key={header.name}>{header.name}</TableHead>)}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {currentSuccessData.map((row, i) => (
-                    <TableRow key={i}>
-                      {successHeaders.map(header => <TableCell key={header}>{String(row[header])}</TableCell>)}
-                    </TableRow>
-                  ))}
+                  {data.length > 0 ? data.map((row, i) => {
+                      const fingerprint = getRowFingerprint(row);
+                      const isRecent = lastRunFingerprints.has(fingerprint);
+                      return (
+                          <TableRow key={i} className={isRecent ? 'bg-green-100 dark:bg-green-900/20 hover:bg-green-200/80 dark:hover:bg-green-900/30' : ''}>
+                              {tableColumns.map(col => <TableCell key={col.name}>{String(row[col.name] ?? '')}</TableCell>)}
+                          </TableRow>
+                      );
+                  }) : (
+                     !isLoading && <TableRow><TableCell colSpan={tableColumns.length} className="text-center">No data found.</TableCell></TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
             <div className="flex items-center justify-end space-x-2 py-4">
-              <span className="text-sm text-muted-foreground">Page {successPage} of {successPages}</span>
-              <Button variant="outline" size="sm" onClick={() => setSuccessPage(p => Math.max(1, p - 1))} disabled={successPage === 1}>Previous</Button>
-              <Button variant="outline" size="sm" onClick={() => setSuccessPage(p => Math.min(successPages, p + 1))} disabled={successPage === successPages}>Next</Button>
+              <span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span>
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1 || isLoading}>Previous</Button>
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || isLoading}>Next</Button>
             </div>
-          </TabsContent>
-
-          <TabsContent value="errors">
-            <div className="h-96 overflow-auto border rounded-lg">
-              <Table>
-                <TableHeader className="sticky top-0 bg-card">
-                  <TableRow>
-                    <TableHead>Row (Excel)</TableHead><TableHead>Column</TableHead><TableHead>Value</TableHead><TableHead>Error Reason</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {currentErrorData.map((err, i) => (
-                    <TableRow key={i}>
-                      <TableCell>{err.row}</TableCell>
-                      <TableCell>{err.column}</TableCell>
-                      <TableCell><Badge variant="destructive" className="max-w-xs truncate">{String(err.value)}</Badge></TableCell>
-                      <TableCell>{err.error}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            <div className="flex items-center justify-end space-x-2 py-4">
-                <span className="text-sm text-muted-foreground">Page {errorPage} of {errorPages}</span>
-              <Button variant="outline" size="sm" onClick={() => setErrorPage(p => Math.max(1, p - 1))} disabled={errorPage === 1}>Previous</Button>
-              <Button variant="outline" size="sm" onClick={() => setErrorPage(p => Math.min(errorPages, p + 1))} disabled={errorPage === errorPages}>Next</Button>
-            </div>
-          </TabsContent>
-        </Tabs>
       </CardContent>
     </Card>
   );
