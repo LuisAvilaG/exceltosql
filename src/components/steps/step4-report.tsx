@@ -57,7 +57,7 @@ export function Step4JobReport() {
     setIsLoading(true);
     
     const currentFilters = appliedFilters as Filters;
-    const dateRangePayload = currentFilters.SalesDate
+    const dateRangePayload = currentFilters.SalesDate && (currentFilters.SalesDate.startDate || currentFilters.SalesDate.endDate)
       ? {
           startDate: currentFilters.SalesDate.startDate
             ? format(currentFilters.SalesDate.startDate, 'yyyy-MM-dd')
@@ -192,10 +192,14 @@ export function Step4JobReport() {
                           ))}
                       </div>
                       <div className="flex justify-end gap-2 px-4 pb-2">
-                          <Button variant="ghost" onClick={handleClearFilters}>Clear</Button>
-                          <Button onClick={handleApplyFilters}>
-                              <Search className="mr-2 h-4 w-4" />
-                              Apply Filters
+                          <Button variant="ghost" onClick={handleClearFilters} disabled={isLoading}>Clear</Button>
+                          <Button onClick={handleApplyFilters} disabled={isLoading}>
+                            {isLoading ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                                <Search className="mr-2 h-4 w-4" />
+                            )}
+                            {isLoading ? 'Filtering...' : 'Apply Filters'}
                           </Button>
                       </div>
                   </AccordionContent>
