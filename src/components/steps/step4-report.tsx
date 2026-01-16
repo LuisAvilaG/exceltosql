@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -54,11 +55,24 @@ export function Step4JobReport() {
 
   const fetchAndSetData = useCallback(async () => {
     setIsLoading(true);
+    
+    const currentFilters = appliedFilters as Filters;
+    const dateRangePayload = currentFilters.SalesDate
+      ? {
+          startDate: currentFilters.SalesDate.startDate
+            ? format(currentFilters.SalesDate.startDate, 'yyyy-MM-dd')
+            : undefined,
+          endDate: currentFilters.SalesDate.endDate
+            ? format(currentFilters.SalesDate.endDate, 'yyyy-MM-dd')
+            : undefined,
+        }
+      : undefined;
+
     const viewDataInput = {
       page: currentPage,
       rowsPerPage: ROWS_PER_PAGE,
-      filters: Object.fromEntries(Object.entries(appliedFilters).filter(([key, value]) => key !== 'SalesDate')),
-      dateRange: (appliedFilters as any).SalesDate,
+      filters: Object.fromEntries(Object.entries(appliedFilters).filter(([key, _]) => key !== 'SalesDate')),
+      dateRange: dateRangePayload,
       sortBy: 'SalesDate',
       sortOrder: 'desc' as 'desc',
     };
