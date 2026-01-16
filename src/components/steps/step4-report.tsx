@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -33,7 +32,7 @@ import { Label } from '../ui/label';
 
 const ROWS_PER_PAGE = 50;
 
-const filterableColumns = tableColumns.filter(c => !c.isIdentity).map(c => c.name);
+const filterableColumns = ['MeraLocationId', 'MeraRevenueCenterName', 'MeraAreaId'];
 
 type Filters = {
     [key: string]: any;
@@ -166,7 +165,7 @@ export function Step4JobReport() {
                           </div>
                           
                           {/* Column Filters */}
-                          {filterableColumns.filter(c => c !== 'SalesDate').map(colName => (
+                          {filterableColumns.map(colName => (
                               <div key={colName} className="space-y-2">
                                   <Label htmlFor={`filter-${colName}`}>{colName}</Label>
                                   <Input 
