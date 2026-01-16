@@ -19,8 +19,10 @@ import {
   TestTube2,
   AlertCircle,
   CheckCircle2,
+  Table2,
 } from 'lucide-react';
 import { testDbConnection } from '@/ai/flows/test-db-connection';
+import { useDataContext } from '@/context/data-context';
 
 export function Header() {
   const [isTestConnOpen, setIsTestConnOpen] = useState(false);
@@ -28,6 +30,7 @@ export function Header() {
     'idle' | 'testing' | 'success' | 'error'
   >('idle');
   const [errorMessage, setErrorMessage] = useState('');
+  const { showStandaloneViewer } = useDataContext();
 
   const handleTestConnection = async () => {
     setTestStatus('testing');
@@ -65,6 +68,14 @@ export function Header() {
           </h1>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={showStandaloneViewer}
+          >
+            <Table2 className="mr-2 h-4 w-4" />
+            View Data
+          </Button>
           <Button
             variant="outline"
             size="sm"

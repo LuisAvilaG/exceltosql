@@ -1,7 +1,6 @@
 
 'use client';
 
-import { useState } from 'react';
 import { Header } from '@/components/layout/header';
 import { Step1Upload } from '@/components/steps/step1-upload';
 import { Step2Mapping } from '@/components/steps/step2-mapping';
@@ -10,7 +9,7 @@ import { Step4JobReport } from '@/components/steps/step4-report';
 import { DataProvider, useDataContext } from '@/context/data-context';
 
 function HomePage() {
-  const { step, setStep } = useDataContext();
+  const { step, viewMode } = useDataContext();
 
   const renderStep = () => {
     switch (step) {
@@ -31,7 +30,9 @@ function HomePage() {
     <div className="flex flex-col min-h-screen bg-background">
       <Header />
       <main className="flex-1 container mx-auto p-4 md:p-8">
-        <div className="max-w-7xl mx-auto">{renderStep()}</div>
+        <div className="max-w-7xl mx-auto">
+            {viewMode === 'viewer' ? <Step4JobReport /> : renderStep()}
+        </div>
       </main>
     </div>
   );

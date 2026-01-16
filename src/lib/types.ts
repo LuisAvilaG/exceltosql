@@ -120,4 +120,7 @@ export type DataContextType = {
   lastRunFingerprints: Set<string>;
   setLastRunFingerprints: (fingerprints: Set<string>) => void;
   resetData: () => void;
+  viewMode: 'wizard' | 'viewer';
+  setViewMode: (mode: 'wizard' | 'viewer') => void;
+  showStandaloneViewer: () => void;
 };

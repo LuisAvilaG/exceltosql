@@ -16,6 +16,7 @@ const initialState = {
     jobResult: null,
     isDryRun: false,
     lastRunFingerprints: new Set<string>(),
+    viewMode: 'wizard' as 'wizard' | 'viewer',
 };
 
 export function DataProvider({ children }: { children: ReactNode }) {
@@ -28,6 +29,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [jobResult, setJobResult] = useState<JobResult | null>(initialState.jobResult);
     const [isDryRun, setIsDryRun] = useState(initialState.isDryRun);
     const [lastRunFingerprints, setLastRunFingerprints] = useState<Set<string>>(initialState.lastRunFingerprints);
+    const [viewMode, setViewMode] = useState<'wizard' | 'viewer'>(initialState.viewMode);
 
 
     const resetData = () => {
@@ -40,6 +42,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setJobResult(initialState.jobResult);
         setIsDryRun(initialState.isDryRun);
         setLastRunFingerprints(initialState.lastRunFingerprints);
+        setViewMode(initialState.viewMode);
+    };
+
+    const showStandaloneViewer = () => {
+        setLastRunFingerprints(new Set<string>());
+        setViewMode('viewer');
     };
 
     const value = {
@@ -62,6 +70,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         lastRunFingerprints,
         setLastRunFingerprints,
         resetData,
+        viewMode,
+        setViewMode,
+        showStandaloneViewer,
     };
 
     return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
