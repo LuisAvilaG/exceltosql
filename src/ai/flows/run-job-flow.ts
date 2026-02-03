@@ -4,7 +4,6 @@ import { ai } from '@/ai/genkit';
 import * as sql from 'mssql';
 import { tableColumns } from '@/lib/schema';
 import { RunJobInputSchema, RunJobOutputSchema, RunJobInput, RunJobOutput } from '@/lib/types';
-import { parse } from 'date-fns';
 
 // Let SQL driver manage the connection pool
 let pool: sql.ConnectionPool | null = null;
@@ -95,9 +94,9 @@ const runJobFlow = ai.defineFlow(
                 const values = mappedCols.map(col => {
                     let val = row[col.name];
                     if (col.type === 'datetime' && typeof val === 'string') {
-                      // The mssql driver's `sql.Date` type expects a JS Date object.
-                      // The client sends 'YYYY-MM-DD' strings. We must parse them back.
-                      const parsedDate = parse(val, 'yyyy-MM-dd', new Date());
+                      // The client sends 'YYYY-MM-DD' strings. Create a UTC date object.
+                      // Appending 'T00:00:00.000Z' makes it explicitly UTC midnight.
+                      const parsedDate = new Date(`${val}T00:00:00.000Z`);
                       return isNaN(parsedDate.getTime()) ? null : parsedDate;
                     }
                     return val;

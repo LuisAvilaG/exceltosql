@@ -20,7 +20,6 @@ import type { ExcelData, ErrorDetail, RunJobInput } from '@/lib/types';
 import { Input } from '../ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { tableColumns, tableName } from '@/lib/schema';
-import { parse, isValid, format } from 'date-fns';
 import { runJob } from '@/ai/flows/run-job-flow';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useDataContext } from '@/context/data-context';
@@ -97,37 +96,48 @@ export function Step3Run() {
                         case 'datetime':
                             const dateStr = String(rawValue).trim();
                             let finalDate: Date | null = null;
-                            let errorMessage = 'Invalid or unsupported date format. Supported formats: DD/MM/YYYY, MM/DD/YYYY, MM/DD/YY, YYYY-MM-DD';
+                            const errorMessage = 'Invalid or unsupported date format. Please use DD/MM/YYYY, MM/DD/YYYY, or YYYY-MM-DD.';
 
                             if (typeof dateStr === 'string') {
-                                if (dateStr.includes('/')) {
-                                    const parts = dateStr.split('/');
-                                    if (parts.length === 3) {
-                                        const yearPart = parts[2].length === 2 ? '20' + parts[2] : parts[2];
-                                        
-                                        // Attempt 1: DD/MM/YYYY
-                                        let attempt1 = parse(`${parts[0]}/${parts[1]}/${yearPart}`, 'dd/MM/yyyy', new Date());
-                                        if (isValid(attempt1)) {
-                                            finalDate = attempt1;
-                                        } else {
-                                            // Attempt 2: MM/DD/YYYY or MM/DD/YY
-                                            let attempt2 = parse(`${parts[0]}/${parts[1]}/${yearPart}`, 'MM/dd/yyyy', new Date());
-                                            if (isValid(attempt2)) {
-                                                finalDate = attempt2;
-                                            }
+                                const parts = dateStr.includes('/') ? dateStr.split('/') : dateStr.split('-');
+                                if (parts.length === 3) {
+                                    let day: number, month: number, year: number;
+
+                                    if (dateStr.includes('/')) {
+                                        const dayPart = parseInt(parts[0], 10);
+                                        const monthPart = parseInt(parts[1], 10);
+                                        const yearPartRaw = parts[2];
+                                        const yearPart = parseInt(yearPartRaw.length === 2 ? '20' + yearPartRaw : yearPartRaw, 10);
+
+                                        // Try DD/MM/YYYY first
+                                        if (dayPart > 12 || monthPart > 12) {
+                                             day = dayPart;
+                                             month = monthPart;
+                                             year = yearPart;
+                                        } else { // Ambiguous (e.g., 01/02/2026), assume DD/MM/YYYY as primary format
+                                            day = dayPart;
+                                            month = monthPart;
+                                            year = yearPart;
                                         }
+                                        
+                                    } else { // YYYY-MM-DD
+                                        year = parseInt(parts[0], 10);
+                                        month = parseInt(parts[1], 10);
+                                        day = parseInt(parts[2], 10);
                                     }
-                                } else if (dateStr.includes('-')) {
-                                    // Attempt 3: YYYY-MM-DD
-                                    const attempt = parse(dateStr, 'yyyy-MM-dd', new Date());
-                                    if (isValid(attempt)) {
-                                        finalDate = attempt;
+
+                                    if (year && month && day && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                                        // JS month is 0-indexed, create date in UTC to avoid timezone shifts.
+                                        const candidateDate = new Date(Date.UTC(year, month - 1, day));
+                                        if (candidateDate.getUTCFullYear() === year && candidateDate.getUTCMonth() === month - 1 && candidateDate.getUTCDate() === day) {
+                                            finalDate = candidateDate;
+                                        }
                                     }
                                 }
                             }
                             
                             if (finalDate) {
-                                parsedValue = format(finalDate, 'yyyy-MM-dd');
+                                parsedValue = finalDate.toISOString().split('T')[0];
                             } else {
                                 localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: dateStr, error: errorMessage });
                                 rowHasError = true;
