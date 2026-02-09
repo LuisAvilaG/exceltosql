@@ -96,7 +96,7 @@ export function Step3Run() {
                         case 'datetime':
                             const dateStr = String(rawValue).trim();
                             let finalDate: Date | null = null;
-                            const errorMessage = 'Invalid or unsupported date format. Please use DD/MM/YYYY, MM/DD/YYYY, or YYYY-MM-DD.';
+                            const errorMessage = 'Invalid or unsupported date format. Please use DD/MM/YYYY or YYYY-MM-DD.';
 
                             if (typeof dateStr === 'string') {
                                 const parts = dateStr.includes('/') ? dateStr.split('/') : dateStr.split('-');
@@ -104,31 +104,23 @@ export function Step3Run() {
                                     let day: number, month: number, year: number;
 
                                     if (dateStr.includes('/')) {
-                                        const dayPart = parseInt(parts[0], 10);
-                                        const monthPart = parseInt(parts[1], 10);
-                                        const yearPartRaw = parts[2];
-                                        const yearPart = parseInt(yearPartRaw.length === 2 ? '20' + yearPartRaw : yearPartRaw, 10);
-
-                                        // Try DD/MM/YYYY first
-                                        if (dayPart > 12 || monthPart > 12) {
-                                             day = dayPart;
-                                             month = monthPart;
-                                             year = yearPart;
-                                        } else { // Ambiguous (e.g., 01/02/2026), assume DD/MM/YYYY as primary format
-                                            day = dayPart;
-                                            month = monthPart;
-                                            year = yearPart;
-                                        }
-                                        
-                                    } else { // YYYY-MM-DD
+                                        // Strictly assume DD/MM/YYYY format
+                                        day = parseInt(parts[0], 10);
+                                        month = parseInt(parts[1], 10);
+                                        const yearRaw = parts[2];
+                                        year = parseInt(yearRaw.length === 2 ? '20' + yearRaw : yearRaw, 10);
+                                    } else { // Strictly assume YYYY-MM-DD format
                                         year = parseInt(parts[0], 10);
                                         month = parseInt(parts[1], 10);
                                         day = parseInt(parts[2], 10);
                                     }
 
+                                    // Validate the parsed parts
                                     if (year && month && day && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                                        // JS month is 0-indexed, create date in UTC to avoid timezone shifts.
+                                        // JS month is 0-indexed. Create date in UTC to avoid timezone shifts.
                                         const candidateDate = new Date(Date.UTC(year, month - 1, day));
+                                        
+                                        // Final check to ensure date is valid (e.g. not Feb 30)
                                         if (candidateDate.getUTCFullYear() === year && candidateDate.getUTCMonth() === month - 1 && candidateDate.getUTCDate() === day) {
                                             finalDate = candidateDate;
                                         }
