@@ -95,47 +95,31 @@ export function Step3Run() {
                             break;
                         case 'datetime':
                             const dateStr = String(rawValue).trim();
+                            const errorMessage = 'Invalid date format. Expected YYYY-MM-DD.';
                             let finalDate: Date | null = null;
-                            const errorMessage = 'Invalid or unsupported date format. Please use DD/MM/YYYY or YYYY-MM-DD.';
+                            
+                            // Step 1 now guarantees YYYY-MM-DD format, so we just validate it.
+                            if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+                                const parts = dateStr.split('-');
+                                const year = parseInt(parts[0], 10);
+                                const month = parseInt(parts[1], 10); // 1-12
+                                const day = parseInt(parts[2], 10);
 
-                            if (typeof dateStr === 'string') {
-                                const parts = dateStr.includes('/') ? dateStr.split('/') : dateStr.split('-');
-                                if (parts.length === 3) {
-                                    let day: number, month: number, year: number;
-
-                                    if (dateStr.includes('/')) {
-                                        // Strictly assume DD/MM/YYYY format
-                                        day = parseInt(parts[0], 10);
-                                        month = parseInt(parts[1], 10);
-                                        const yearRaw = parts[2];
-                                        year = parseInt(yearRaw.length === 2 ? '20' + yearRaw : yearRaw, 10);
-                                    } else { // Strictly assume YYYY-MM-DD format
-                                        year = parseInt(parts[0], 10);
-                                        month = parseInt(parts[1], 10);
-                                        day = parseInt(parts[2], 10);
-                                    }
-
-                                    // Validate the parsed parts
-                                    if (year && month && day && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                                        // JS month is 0-indexed. Create date in UTC to avoid timezone shifts.
-                                        const candidateDate = new Date(Date.UTC(year, month - 1, day));
-                                        
-                                        // Final check to ensure date is valid (e.g. not Feb 30)
-                                        if (candidateDate.getUTCFullYear() === year && candidateDate.getUTCMonth() === month - 1 && candidateDate.getUTCDate() === day) {
-                                            finalDate = candidateDate;
-                                        }
-                                    }
+                                // Create UTC date to check for validity (e.g. not 2023-02-30)
+                                const candidateDate = new Date(Date.UTC(year, month - 1, day));
+                                if (candidateDate.getUTCFullYear() === year && candidateDate.getUTCMonth() === month - 1 && candidateDate.getUTCDate() === day) {
+                                    finalDate = candidateDate;
                                 }
                             }
-                            
+
                             if (finalDate) {
-                                parsedValue = finalDate.toISOString().split('T')[0];
+                                // Pass the validated YYYY-MM-DD string to the backend
+                                parsedValue = dateStr;
                             } else {
                                 localErrors.push({ row: excelRowNumber, column: sqlCol.name, value: dateStr, error: errorMessage });
                                 rowHasError = true;
                             }
                             break;
-
                         case 'varchar(100)':
                             parsedValue = String(rawValue);
                             if (parsedValue.length > 100) {

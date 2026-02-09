@@ -71,8 +71,8 @@ export function Step1Upload() {
       const reader = new FileReader();
       reader.onload = (e) => {
         const data = e.target?.result;
-        // Read file without auto-parsing dates to ensure we control the logic
-        const wb = XLSX.read(data, { type: 'array' });
+        // Read file with cellDates: true to get JS Date objects for date cells
+        const wb = XLSX.read(data, { type: 'array', cellDates: true });
         setWorkbook(wb);
         const sheets = wb.SheetNames;
         setSheetNames(sheets);
@@ -91,49 +91,29 @@ export function Step1Upload() {
     if (!wb) return;
     setSelectedSheet(sheetName);
     const ws = wb.Sheets[sheetName];
-    // Get formatted strings from Excel, not raw values or auto-parsed dates
-    const dataRows = XLSX.utils.sheet_to_json(ws, { raw: false }) as ExcelData;
+    // sheet_to_json will use the JS Date objects created by cellDates:true
+    const dataRows = XLSX.utils.sheet_to_json(ws) as ExcelData;
     
     if (dataRows.length > 0) {
         const fileHeaders = Object.keys(dataRows[0]);
         
         const formattedData = dataRows.map(row => {
             const newRow = {...row};
-            const dateHeader = fileHeaders.find(h => h.toLowerCase() === 'salesdate');
+            // Iterate over all keys in the row to find and format dates
+            for (const header of fileHeaders) {
+                const value = newRow[header];
+                if (value instanceof Date) {
+                    // This is a JS Date object from the xlsx library.
+                    // We must format it to YYYY-MM-DD in a timezone-safe way.
+                    // Using UTC methods prevents shifts due to local timezone.
+                    const year = value.getUTCFullYear();
+                    const month = value.getUTCMonth() + 1; // getUTCMonth() is 0-indexed
+                    const day = value.getUTCDate();
+                    
+                    const monthStr = month < 10 ? '0' + month : String(month);
+                    const dayStr = day < 10 ? '0' + day : String(day);
 
-            if (dateHeader && newRow[dateHeader]) {
-                const dateStr = String(newRow[dateHeader]).trim();
-                let finalDate: Date | null = null;
-
-                if (dateStr) {
-                    const parts = dateStr.includes('/') ? dateStr.split('/') : dateStr.split('-');
-                    if (parts.length === 3) {
-                        let day: number, month: number, year: number;
-
-                        if (dateStr.includes('/')) {
-                            // Strictly assume D/M/Y format for '/'
-                            day = parseInt(parts[0], 10);
-                            month = parseInt(parts[1], 10);
-                            const yearRaw = parts[2];
-                            year = parseInt(yearRaw.length === 2 ? '20' + yearRaw : yearRaw, 10);
-                        } else {
-                            // Strictly assume Y-M-D format for '-'
-                            year = parseInt(parts[0], 10);
-                            month = parseInt(parts[1], 10);
-                            day = parseInt(parts[2], 10);
-                        }
-
-                        if (year && month && day && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                            const candidateDate = new Date(Date.UTC(year, month - 1, day));
-                            if (candidateDate.getUTCFullYear() === year && candidateDate.getUTCMonth() === month - 1 && candidateDate.getUTCDate() === day) {
-                                finalDate = candidateDate;
-                            }
-                        }
-                    }
-                }
-                
-                if (finalDate) {
-                    newRow[dateHeader] = finalDate.toISOString().split('T')[0];
+                    newRow[header] = `${year}-${monthStr}-${dayStr}`;
                 }
             }
             return newRow;
