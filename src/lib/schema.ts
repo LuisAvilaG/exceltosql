@@ -26,7 +26,7 @@ export const usaSalesByRevenueCenterSchema = {
   PAXBudget: { type: 'decimal(38,0)' as const, isIdentity: false, isRequired: false, description: 'Budgeted guest count (pax)' },
   Tax: { type: 'decimal(38,0)' as const, isIdentity: false, isRequired: false, description: 'Total tax amount' },
   DiscountTypeSales: { type: 'decimal(10,0)' as const, isIdentity: false, isRequired: false, description: 'Discount amount by sales type' },
-  DiscountTypeAdmOp: { type: 'decimal(10,0)' as const, isIdentity: false, isRequired: false, description: 'Administrative or operational discount' },
+  DiscountsTypeAdmOp: { type: 'decimal(10,0)' as const, isIdentity: false, isRequired: false, description: 'Administrative or operational discount' },
   TotalOpenCheckTime: { type: 'decimal(38,0)' as const, isIdentity: false, isRequired: false, description: 'Total time checks were open, in seconds' },
   MeraRevenueCenterId: { type: 'int' as const, isIdentity: false, isRequired: true, description: 'ID of the revenue center' },
 } as const;

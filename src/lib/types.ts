@@ -124,3 +124,37 @@ export type DataContextType = {
   setViewMode: (mode: 'wizard' | 'viewer') => void;
   showStandaloneViewer: () => void;
 };
+
+
+// Schemas for delete-data-flow.ts
+export const DeleteDataInputSchema = z.discriminatedUnion('mode', [
+    z.object({
+        mode: z.literal('ids'),
+        ids: z.array(z.number().int()).min(1).max(5000),
+    }),
+    z.object({
+        mode: z.literal('filter'),
+        filters: z.record(z.string(), z.any()).optional(),
+        dateRange: z.object({
+            startDate: z.string().optional(),
+            endDate: z.string().optional(),
+        }).optional(),
+        // Count the user saw in the confirmation dialog; the delete aborts if it no longer matches.
+        expectedCount: z.number().int().nonnegative(),
+    }),
+]);
+export type DeleteDataInput = z.infer<typeof DeleteDataInputSchema>;
+
+export const DeleteDataOutputSchema = z.object({
+    success: z.boolean(),
+    deleted: z.number().int(),
+    error: z.string().optional(),
+});
+export type DeleteDataOutput = z.infer<typeof DeleteDataOutputSchema>;
+
+
+// Schemas for filter-options-flow.ts
+export const FilterOptionsOutputSchema = z.object({
+    options: z.record(z.string(), z.array(z.union([z.string(), z.number()]))),
+});
+export type FilterOptionsOutput = z.infer<typeof FilterOptionsOutputSchema>;

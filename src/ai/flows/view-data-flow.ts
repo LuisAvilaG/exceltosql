@@ -3,37 +3,8 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import * as sql from 'mssql';
+import { getPool, buildWhere } from '@/lib/db';
 import { ViewDataInputSchema, ViewDataOutputSchema, ViewDataInput, ViewDataOutput } from '@/lib/types';
-
-let pool: sql.ConnectionPool | null = null;
-
-async function getPool(): Promise<sql.ConnectionPool> {
-    if (pool && pool.connected) {
-        return pool;
-    }
-    const config: sql.config = {
-      user: process.env.SQL_USER,
-      password: process.env.SQL_PASSWORD,
-      server: process.env.SQL_HOST || 'localhost',
-      database: process.env.SQL_DATABASE,
-      port: Number(process.env.SQL_PORT) || 1433,
-      options: {
-        encrypt: process.env.SQL_ENCRYPT === 'true',
-        trustServerCertificate: process.env.SQL_TRUST_SERVER_CERTIFICATE === 'true',
-      },
-      pool: {
-        max: 10,
-        min: 0,
-        idleTimeoutMillis: 30000
-      },
-    };
-    pool = await new sql.ConnectionPool(config).connect();
-    pool.on('error', err => {
-        console.error('SQL Pool Error', err);
-        pool = null; // Reset pool on error
-    });
-    return pool;
-}
 
 const viewDataFlow = ai.defineFlow(
   {
@@ -46,35 +17,7 @@ const viewDataFlow = ai.defineFlow(
       const pool = await getPool();
       const request = new sql.Request(pool);
 
-      let whereClauses: string[] = [];
-      let paramIndex = 0;
-
-      // Handle standard column filters
-      if (filters) {
-          for (const [key, value] of Object.entries(filters)) {
-              if (value !== undefined && value !== null && value !== '') {
-                  const paramName = `param${paramIndex++}`;
-                  whereClauses.push(`[${key}] LIKE @${paramName}`);
-                  request.input(paramName, `%${value}%`);
-              }
-          }
-      }
-
-      // Handle date range filter
-      if (dateRange) {
-          if (dateRange.startDate) {
-              const paramName = `param${paramIndex++}`;
-              whereClauses.push(`[SalesDate] >= @${paramName}`);
-              request.input(paramName, sql.Date, new Date(dateRange.startDate));
-          }
-          if (dateRange.endDate) {
-              const paramName = `param${paramIndex++}`;
-              whereClauses.push(`[SalesDate] <= @${paramName}`);
-              request.input(paramName, sql.Date, new Date(dateRange.endDate));
-          }
-      }
-
-      const whereCondition = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+      const whereCondition = buildWhere(request, { filters, dateRange });
 
       // Query for total count
       const countQuery = `SELECT COUNT(*) as total FROM REP_usaSalesByRevenueCenter ${whereCondition}`;
